@@ -117,7 +117,6 @@ namespace ValheimPerformanceOverhaul
 
         private void UpdateCullingState()
         {
-            // Используем глобальный кэш игроков
             var players = DistanceCullerManager.Players;
 
             if (players == null || players.Count == 0)
@@ -212,10 +211,18 @@ namespace ValheimPerformanceOverhaul
                 LogCullingStateChange(enabled);
             }
 
-            for (int i = 0; i < _culledComponents.Count; i++)
+            // ✅ ИСПРАВЛЕНО: Используем обратный цикл вместо RemoveAll
+            for (int i = _culledComponents.Count - 1; i >= 0; i--)
             {
                 var component = _culledComponents[i];
-                if (component != null && component.enabled != enabled)
+
+                if (component == null)
+                {
+                    _culledComponents.RemoveAt(i);
+                    continue;
+                }
+
+                if (component.enabled != enabled)
                 {
                     try
                     {
@@ -231,22 +238,39 @@ namespace ValheimPerformanceOverhaul
 
             if (Plugin.CullPhysicsEnabled.Value)
             {
+                // ✅ ИСПРАВЛЕНО: Используем список для удаления
+                List<Rigidbody> toRemove = null;
+
                 foreach (var pair in _culledRigidbodies)
                 {
                     Rigidbody rb = pair.Key;
                     bool originalIsKinematic = pair.Value;
 
-                    if (rb != null)
+                    if (rb == null)
                     {
-                        try
-                        {
-                            rb.isKinematic = enabled ? originalIsKinematic : true;
-                        }
-                        catch (System.Exception e)
-                        {
-                            if (Plugin.DebugLoggingEnabled.Value)
-                                Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic: {e.Message}");
-                        }
+                        if (toRemove == null)
+                            toRemove = new List<Rigidbody>();
+                        toRemove.Add(rb);
+                        continue;
+                    }
+
+                    try
+                    {
+                        rb.isKinematic = enabled ? originalIsKinematic : true;
+                    }
+                    catch (System.Exception e)
+                    {
+                        if (Plugin.DebugLoggingEnabled.Value)
+                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic: {e.Message}");
+                    }
+                }
+
+                // Очистка мертвых ссылок
+                if (toRemove != null)
+                {
+                    foreach (var rb in toRemove)
+                    {
+                        _culledRigidbodies.Remove(rb);
                     }
                 }
             }

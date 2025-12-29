@@ -15,10 +15,11 @@ namespace ValheimPerformanceOverhaul
     {
         private const string PluginGUID = "com.Skarif.ValheimPerformanceOverhaul";
         private const string PluginName = "Valheim Performance Overhaul";
-        private const string PluginVersion = "2.5.0";
+        private const string PluginVersion = "2.5.1";
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
         public static ManualLogSource Log;
+        public static Plugin Instance;
 
         // Секция 1: Общие
         public static ConfigEntry<bool> DebugLoggingEnabled;
@@ -40,7 +41,7 @@ namespace ValheimPerformanceOverhaul
         // Секция 5: JIT Warm-up
         public static ConfigEntry<bool> JitWarmupEnabled;
 
-        // Секция 6: Light Culling (ОБНОВЛЕНО)
+        // Секция 6: Light Culling
         public static ConfigEntry<bool> LightCullingEnabled;
         public static ConfigEntry<int> MaxActiveLights;
         public static ConfigEntry<float> LightCullDistance;
@@ -74,20 +75,21 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<int> NetworkQueueSize;
         public static ConfigEntry<int> NetworkSendRateMin;
         public static ConfigEntry<int> NetworkSendRateMax;
+        public static ConfigEntry<int> NetworkCompressionThreshold;
 
-        // Секция 10: Piece Optimization (НОВОЕ)
+        // Секция 10: Piece Optimization
         public static ConfigEntry<bool> PieceOptimizationEnabled;
         public static ConfigEntry<float> PieceUpdateInterval;
         public static ConfigEntry<float> PieceColliderDistance;
         public static ConfigEntry<float> PieceSupportCacheDuration;
         public static ConfigEntry<float> PieceUpdateSkipDistance;
 
-        // Секция 11: Particle Optimization (НОВОЕ)
+        // Секция 11: Particle Optimization
         public static ConfigEntry<bool> ParticleOptimizationEnabled;
         public static ConfigEntry<float> ParticleCullDistance;
         public static ConfigEntry<int> MaxActiveParticles;
 
-        // Секция 12: Vegetation Optimization (НОВОЕ)
+        // Секция 12: Vegetation Optimization
         public static ConfigEntry<bool> VegetationOptimizationEnabled;
         public static ConfigEntry<float> GrassRenderDistance;
         public static ConfigEntry<float> GrassDensityMultiplier;
@@ -95,20 +97,17 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<float> DetailDensity;
         public static ConfigEntry<int> TerrainMaxLOD;
 
-        // Секция 13: Animator Optimization (НОВОЕ)
+        // Секция 13: Animator Optimization
         public static ConfigEntry<bool> AnimatorOptimizationEnabled;
 
-        // Секция 14: ZDO Optimization (НОВОЕ)
+        // Секция 14: ZDO Optimization
         public static ConfigEntry<bool> ZDOOptimizationEnabled;
         public static ConfigEntry<float> ZDOSyncInterval;
 
-        // Секция 15: Minimap Optimization (НОВОЕ)
+        // Секция 15: Minimap Optimization
         public static ConfigEntry<bool> MinimapOptimizationEnabled;
         public static ConfigEntry<int> MinimapTextureSize;
         public static ConfigEntry<int> MinimapUpdateInterval;
-
-        private GameObject _pieceManagerObject;
-        private static Plugin Instance;
 
         private void Awake()
         {
@@ -116,38 +115,15 @@ namespace ValheimPerformanceOverhaul
             Instance = this;
             SetupConfig();
 
-            // Инициализация систем
-            if (ObjectPoolingEnabled.Value)
-            {
-                ObjectPoolManager.Initialize();
-                Log.LogInfo("[ObjectPooling] System initialized.");
-            }
+            Log.LogInfo($"Initializing {PluginName} v{PluginVersion}...");
 
-            if (AudioPoolingEnabled.Value)
-            {
-                AudioPoolManager.Initialize();
-                Log.LogInfo("[AudioPooling] System initialized.");
-            }
-
+            // Отложенная инициализация тяжелых систем
             if (GraphicsSettingsEnabled.Value)
             {
                 ApplyImmediateGraphicsSettings();
             }
 
-            if (DistanceCullerEnabled.Value)
-            {
-                var manager = new GameObject("_VPO_DistanceCullerManager");
-                manager.AddComponent<DistanceCullerManager>();
-                DontDestroyOnLoad(manager);
-                Log.LogInfo("[DistanceCuller] Manager initialized.");
-            }
-
-            if (PieceOptimizationEnabled.Value)
-            {
-                Log.LogInfo("[PieceOptimization] Module enabled. Patches will be applied.");
-            }
-
-            Log.LogInfo($"Applying patches for {PluginName} (v{PluginVersion})...");
+            Log.LogInfo($"Applying Harmony patches...");
 
             try
             {
@@ -160,41 +136,47 @@ namespace ValheimPerformanceOverhaul
             }
         }
 
-        // LightManager создается автоматически через патч Player.OnSpawned
-        // Этот метод больше не нужен, но оставлен для обратной совместимости
-        private void InitializeLightManager()
+        private void Start()
         {
-            // Пустой метод - инициализация теперь в LightCullingPatches.cs
-        }
+            // Отложенная инициализация менеджеров (избегаем lag spike при загрузке)
+            if (ObjectPoolingEnabled.Value)
+            {
+                ObjectPoolManager.Initialize();
+                Log.LogInfo("[ObjectPooling] System initialized.");
+            }
 
-        public static void EnsureLightManagerInitialized()
-        {
-            // Пустой метод - инициализация теперь в LightCullingPatches.cs
+            if (AudioPoolingEnabled.Value)
+            {
+                AudioPoolManager.Initialize();
+                Log.LogInfo("[AudioPooling] System initialized.");
+            }
+
+            if (DistanceCullerEnabled.Value)
+            {
+                var manager = new GameObject("_VPO_DistanceCullerManager");
+                manager.AddComponent<DistanceCullerManager>();
+                DontDestroyOnLoad(manager);
+                Log.LogInfo("[DistanceCuller] Manager initialized.");
+            }
         }
 
         private void SetupConfig()
         {
-            // ============================================================
             // Секция 1: Общие
-            // ============================================================
             DebugLoggingEnabled = Config.Bind(
                 "1. General",
                 "Enable Debug Logging",
                 false,
                 "Enables detailed diagnostic logs for troubleshooting.");
 
-            // ============================================================
             // Секция 2: GC Control
-            // ============================================================
             GcControlEnabled = Config.Bind(
                 "2. GC Control",
                 "Enabled",
                 true,
                 "Prevents garbage collection during combat or movement to reduce stuttering.");
 
-            // ============================================================
             // Секция 3: Distance Culler
-            // ============================================================
             DistanceCullerEnabled = Config.Bind(
                 "3. Distance Culler",
                 "Enabled",
@@ -233,29 +215,23 @@ namespace ValheimPerformanceOverhaul
                 "3. Distance Culler",
                 "Exclusions",
                 "TombStone,portal_wood",
-                "Comma-separated list of prefab names to NEVER cull. Example: Boar,Neck,Greydwarf");
+                "Comma-separated list of prefab names to NEVER cull.");
 
-            // ============================================================
             // Секция 4: Object Pooling
-            // ============================================================
             ObjectPoolingEnabled = Config.Bind(
                 "4. Object Pooling",
                 "Enabled",
                 true,
-                "Reuses ItemDrop objects to reduce instantiation overhead and prevent duplication bugs.");
+                "Reuses ItemDrop objects to reduce instantiation overhead.");
 
-            // ============================================================
             // Секция 5: JIT Warm-up
-            // ============================================================
             JitWarmupEnabled = Config.Bind(
                 "5. JIT Warm-up",
                 "Enabled",
                 true,
                 "Pre-compiles critical methods at game start to prevent initial stuttering.");
 
-            // ============================================================
-            // Секция 6: Light Culling (ОБНОВЛЕНО)
-            // ============================================================
+            // Секция 6: Light Culling
             LightCullingEnabled = Config.Bind(
                 "6. Light Culling",
                 "Enabled",
@@ -267,7 +243,7 @@ namespace ValheimPerformanceOverhaul
                 "Max Active Lights",
                 15,
                 new ConfigDescription(
-                    "Maximum number of active lights near the player. Lower = better FPS.",
+                    "Maximum number of active lights near the player.",
                     new AcceptableValueRange<int>(5, 50)));
 
             LightCullDistance = Config.Bind(
@@ -275,7 +251,7 @@ namespace ValheimPerformanceOverhaul
                 "Light Cull Distance",
                 60f,
                 new ConfigDescription(
-                    "Maximum distance for active lights. Beyond this, lights are disabled.",
+                    "Maximum distance for active lights.",
                     new AcceptableValueRange<float>(20f, 150f)));
 
             MaxShadowCasters = Config.Bind(
@@ -283,7 +259,7 @@ namespace ValheimPerformanceOverhaul
                 "Max Shadow Casters",
                 5,
                 new ConfigDescription(
-                    "Maximum number of lights that can cast shadows simultaneously. HUGE performance impact! Lower = much better FPS.",
+                    "Maximum number of lights that can cast shadows simultaneously.",
                     new AcceptableValueRange<int>(0, 15)));
 
             ShadowCullDistance = Config.Bind(
@@ -291,15 +267,15 @@ namespace ValheimPerformanceOverhaul
                 "Shadow Cull Distance",
                 30f,
                 new ConfigDescription(
-                    "Distance at which shadows are disabled. Should be lower than Light Cull Distance for best performance.",
+                    "Distance at which shadows are disabled.",
                     new AcceptableValueRange<float>(10f, 80f)));
 
-            // Light LOD System (НОВОЕ)
+            // Light LOD System
             LightLODEnabled = Config.Bind(
                 "6. Light Culling",
                 "Enable Light LOD System",
                 true,
-                "Enables Level of Detail system for lights. MASSIVE FPS improvement! Automatically switches between full light, emissive materials, and billboards based on distance.");
+                "Enables Level of Detail system for lights. MASSIVE FPS improvement!");
 
             LightLODFullDistance = Config.Bind(
                 "6. Light Culling",
@@ -322,7 +298,7 @@ namespace ValheimPerformanceOverhaul
                 "LOD Emissive Distance",
                 70f,
                 new ConfigDescription(
-                    "Distance at which light is replaced with emissive material (glow only).",
+                    "Distance at which light is replaced with emissive material.",
                     new AcceptableValueRange<float>(40f, 120f)));
 
             LightLODBillboardDistance = Config.Bind(
@@ -330,17 +306,15 @@ namespace ValheimPerformanceOverhaul
                 "LOD Billboard Distance",
                 100f,
                 new ConfigDescription(
-                    "Distance at which emissive is replaced with simple billboard texture.",
+                    "Distance at which emissive is replaced with simple billboard.",
                     new AcceptableValueRange<float>(60f, 200f)));
 
-            // ============================================================
             // Секция 7: Audio Optimization
-            // ============================================================
             AudioPoolingEnabled = Config.Bind(
                 "7. Audio Optimization",
                 "Enabled",
                 true,
-                "Reuses sound effect objects to reduce allocations and improve performance.");
+                "Reuses sound effect objects to reduce allocations.");
 
             AudioPoolSize = Config.Bind(
                 "7. Audio Optimization",
@@ -350,21 +324,19 @@ namespace ValheimPerformanceOverhaul
                     "Total number of reusable AudioSource components.",
                     new AcceptableValueRange<int>(16, 128)));
 
-            // ============================================================
             // Секция 8: Graphics Settings
-            // ============================================================
             GraphicsSettingsEnabled = Config.Bind(
                 "8. Graphics Settings",
                 "Enabled",
                 true,
-                "Enables advanced graphics settings module for performance tuning.");
+                "Enables advanced graphics settings module.");
 
             ConfigShadowDistance = Config.Bind(
                 "8. Graphics Settings",
                 "Shadow Distance",
                 50f,
                 new ConfigDescription(
-                    "Maximum distance for shadow rendering. Lower = better FPS.",
+                    "Maximum distance for shadow rendering.",
                     new AcceptableValueRange<float>(20f, 150f)));
 
             ConfigShadowResolution = Config.Bind(
@@ -372,7 +344,7 @@ namespace ValheimPerformanceOverhaul
                 "Shadow Resolution",
                 512,
                 new ConfigDescription(
-                    "Shadow resolution quality. Lower = better FPS.",
+                    "Shadow resolution quality.",
                     new AcceptableValueList<int>(512, 1024, 2048, 4096)));
 
             ConfigShadowCascades = Config.Bind(
@@ -380,7 +352,7 @@ namespace ValheimPerformanceOverhaul
                 "Shadow Cascades",
                 1,
                 new ConfigDescription(
-                    "Number of shadow cascades. Lower = better FPS, but less shadow detail.",
+                    "Number of shadow cascades.",
                     new AcceptableValueRange<int>(0, 4)));
 
             ConfigTerrainQuality = Config.Bind(
@@ -388,42 +360,48 @@ namespace ValheimPerformanceOverhaul
                 "Terrain Quality Multiplier",
                 0.7f,
                 new ConfigDescription(
-                    "Terrain detail quality. Lower = better FPS.",
+                    "Terrain detail quality.",
                     new AcceptableValueRange<float>(0.1f, 2.0f)));
 
             ConfigReflections = Config.Bind(
                 "8. Graphics Settings",
                 "Enable Reflections",
                 false,
-                "Enables screen-space reflections. Disable for better FPS.");
+                "Enables screen-space reflections.");
 
             ConfigBloom = Config.Bind(
                 "8. Graphics Settings",
                 "Enable Bloom",
                 false,
-                "Enables bloom glow effect. Disable for better FPS.");
+                "Enables bloom glow effect.");
 
-            // ============================================================
             // Секция 9: Network Throttling
-            // ============================================================
             NetworkThrottlingEnabled = Config.Bind(
                 "9. Network Throttling",
                 "Enabled",
                 true,
-                "Enables network optimization module to reduce bandwidth usage.");
+                "Enables network optimization module.");
 
             NetworkCompressionEnabled = Config.Bind(
                 "9. Network Throttling",
                 "Enable Compression",
                 true,
-                "Enables Zstd compression for all network traffic.");
+                "Enables Zstd compression for network traffic.");
+
+            NetworkCompressionThreshold = Config.Bind(
+                "9. Network Throttling",
+                "Compression Threshold (bytes)",
+                128,
+                new ConfigDescription(
+                    "Minimum packet size to compress. Smaller packets are not compressed.",
+                    new AcceptableValueRange<int>(64, 512)));
 
             NetworkUpdateRate = Config.Bind(
                 "9. Network Throttling",
                 "Update Rate Multiplier",
                 0.75f,
                 new ConfigDescription(
-                    "Reduces the frequency of network updates. 1.0 is vanilla, lower = less network traffic.",
+                    "Reduces the frequency of network updates.",
                     new AcceptableValueRange<float>(0.1f, 1.0f)));
 
             NetworkQueueSize = Config.Bind(
@@ -450,21 +428,19 @@ namespace ValheimPerformanceOverhaul
                     "Maximum data send rate.",
                     new AcceptableValueRange<int>(131072, 2097152)));
 
-            // ============================================================
-            // Секция 10: Piece Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 10: Piece Optimization
             PieceOptimizationEnabled = Config.Bind(
                 "10. Piece Optimization",
                 "Enabled",
                 true,
-                "Optimizes building piece updates and collision detection. MAJOR FPS improvement for large bases!");
+                "Optimizes building piece updates and collision detection.");
 
             PieceUpdateInterval = Config.Bind(
                 "10. Piece Optimization",
                 "Update Interval (seconds)",
                 2.0f,
                 new ConfigDescription(
-                    "How often building pieces update their state (wear, support, etc). Higher = better FPS, but slower damage updates. Vanilla = every frame (0.016s).",
+                    "How often building pieces update their state.",
                     new AcceptableValueRange<float>(0.5f, 10.0f)));
 
             PieceColliderDistance = Config.Bind(
@@ -472,7 +448,7 @@ namespace ValheimPerformanceOverhaul
                 "Collider Disable Distance",
                 80f,
                 new ConfigDescription(
-                    "Distance at which building colliders are disabled to reduce physics calculations. Does not affect gameplay.",
+                    "Distance at which building colliders are disabled.",
                     new AcceptableValueRange<float>(40f, 200f)));
 
             PieceSupportCacheDuration = Config.Bind(
@@ -480,7 +456,7 @@ namespace ValheimPerformanceOverhaul
                 "Support Cache Duration (seconds)",
                 5.0f,
                 new ConfigDescription(
-                    "How long to cache building support calculations. Higher = better FPS, but slower structural updates.",
+                    "How long to cache building support calculations.",
                     new AcceptableValueRange<float>(1.0f, 30.0f)));
 
             PieceUpdateSkipDistance = Config.Bind(
@@ -488,17 +464,15 @@ namespace ValheimPerformanceOverhaul
                 "Update Skip Distance",
                 50f,
                 new ConfigDescription(
-                    "Distance at which building pieces stop updating entirely. Pieces beyond this distance won't update wear or support at all.",
+                    "Distance at which building pieces stop updating entirely.",
                     new AcceptableValueRange<float>(30f, 150f)));
 
-            // ============================================================
-            // Секция 11: Particle Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 11: Particle Optimization
             ParticleOptimizationEnabled = Config.Bind(
                 "11. Particle Optimization",
                 "Enabled",
                 true,
-                "Optimizes particle systems (fire, smoke, sparks). HUGE FPS improvement in bases with fires!");
+                "Optimizes particle systems (fire, smoke, sparks).");
 
             ParticleCullDistance = Config.Bind(
                 "11. Particle Optimization",
@@ -513,24 +487,22 @@ namespace ValheimPerformanceOverhaul
                 "Max Active Particle Systems",
                 30,
                 new ConfigDescription(
-                    "Maximum number of active particle systems near the player.",
+                    "Maximum number of active particle systems.",
                     new AcceptableValueRange<int>(10, 100)));
 
-            // ============================================================
-            // Секция 12: Vegetation Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 12: Vegetation Optimization
             VegetationOptimizationEnabled = Config.Bind(
                 "12. Vegetation Optimization",
                 "Enabled",
                 true,
-                "Optimizes grass, bushes and terrain details. Major FPS boost in forests!");
+                "Optimizes grass, bushes and terrain details.");
 
             GrassRenderDistance = Config.Bind(
                 "12. Vegetation Optimization",
                 "Grass Render Distance",
                 60f,
                 new ConfigDescription(
-                    "Distance at which grass is rendered. Lower = better FPS. Vanilla = 80m.",
+                    "Distance at which grass is rendered.",
                     new AcceptableValueRange<float>(30f, 120f)));
 
             GrassDensityMultiplier = Config.Bind(
@@ -538,7 +510,7 @@ namespace ValheimPerformanceOverhaul
                 "Grass Density Multiplier",
                 0.7f,
                 new ConfigDescription(
-                    "Grass density. 1.0 = vanilla, 0.5 = half grass. Lower = better FPS.",
+                    "Grass density. 1.0 = vanilla, 0.5 = half grass.",
                     new AcceptableValueRange<float>(0.3f, 1.0f)));
 
             DetailObjectDistance = Config.Bind(
@@ -546,7 +518,7 @@ namespace ValheimPerformanceOverhaul
                 "Detail Object Distance",
                 80f,
                 new ConfigDescription(
-                    "Distance for small objects (stones, sticks). Vanilla = 120m.",
+                    "Distance for small objects (stones, sticks).",
                     new AcceptableValueRange<float>(40f, 150f)));
 
             DetailDensity = Config.Bind(
@@ -554,7 +526,7 @@ namespace ValheimPerformanceOverhaul
                 "Detail Density",
                 0.7f,
                 new ConfigDescription(
-                    "Density of detail objects. Lower = better FPS.",
+                    "Density of detail objects.",
                     new AcceptableValueRange<float>(0.3f, 1.0f)));
 
             TerrainMaxLOD = Config.Bind(
@@ -562,38 +534,32 @@ namespace ValheimPerformanceOverhaul
                 "Terrain Max LOD",
                 1,
                 new ConfigDescription(
-                    "Maximum LOD level for terrain. Lower = better FPS. 0 = highest quality, 2 = lowest.",
+                    "Maximum LOD level for terrain.",
                     new AcceptableValueRange<int>(0, 2)));
 
-            // ============================================================
-            // Секция 13: Animator Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 13: Animator Optimization
             AnimatorOptimizationEnabled = Config.Bind(
                 "13. Animator Optimization",
                 "Enabled",
                 true,
-                "Optimizes character animations. Disables animations for off-screen and distant characters.");
+                "Optimizes character animations.");
 
-            // ============================================================
-            // Секция 14: ZDO Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 14: ZDO Optimization
             ZDOOptimizationEnabled = Config.Bind(
                 "14. ZDO Optimization",
                 "Enabled",
                 true,
-                "Reduces network synchronization overhead. Great for servers!");
+                "Reduces network synchronization overhead.");
 
             ZDOSyncInterval = Config.Bind(
                 "14. ZDO Optimization",
                 "Static Object Sync Interval",
                 2.0f,
                 new ConfigDescription(
-                    "How often static objects (buildings) sync over network. Higher = less network load.",
+                    "How often static objects sync over network.",
                     new AcceptableValueRange<float>(0.5f, 10.0f)));
 
-            // ============================================================
-            // Секция 15: Minimap Optimization (НОВОЕ)
-            // ============================================================
+            // Секция 15: Minimap Optimization
             MinimapOptimizationEnabled = Config.Bind(
                 "15. Minimap Optimization",
                 "Enabled",
@@ -605,7 +571,7 @@ namespace ValheimPerformanceOverhaul
                 "Minimap Texture Size",
                 1024,
                 new ConfigDescription(
-                    "Minimap texture resolution. Vanilla = 2048. Lower = better FPS.",
+                    "Minimap texture resolution.",
                     new AcceptableValueList<int>(512, 1024, 2048)));
 
             MinimapUpdateInterval = Config.Bind(
@@ -613,7 +579,7 @@ namespace ValheimPerformanceOverhaul
                 "Update Interval (frames)",
                 2,
                 new ConfigDescription(
-                    "Update minimap every N frames. Higher = better FPS, but less smooth updates.",
+                    "Update minimap every N frames.",
                     new AcceptableValueRange<int>(1, 10)));
         }
 
@@ -655,11 +621,6 @@ namespace ValheimPerformanceOverhaul
         {
             Log.LogInfo($"Unpatching all {PluginName} methods.");
             _harmony?.UnpatchSelf();
-
-            if (_pieceManagerObject != null)
-            {
-                Destroy(_pieceManagerObject);
-            }
         }
     }
 }

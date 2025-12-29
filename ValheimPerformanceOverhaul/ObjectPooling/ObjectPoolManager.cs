@@ -1,14 +1,15 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
-using HarmonyLib;
 
 namespace ValheimPerformanceOverhaul.ObjectPooling
 {
     public static class ObjectPoolManager
     {
         private static readonly Dictionary<int, Queue<GameObject>> _pools = new Dictionary<int, Queue<GameObject>>();
+        private static readonly HashSet<GameObject> _objectsInUse = new HashSet<GameObject>(); // ✅ НОВОЕ: Трекинг активных объектов
         private static Transform _poolParent;
         private const int MAX_POOL_SIZE = 100;
+        private static readonly object _lockObject = new object(); // ✅ НОВОЕ: Thread safety
 
         public static void Initialize()
         {
@@ -17,7 +18,12 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             var poolObject = new GameObject("_VPO_ObjectPool");
             _poolParent = poolObject.transform;
             Object.DontDestroyOnLoad(poolObject);
-            _pools.Clear();
+
+            lock (_lockObject)
+            {
+                _pools.Clear();
+                _objectsInUse.Clear();
+            }
 
             Plugin.Log.LogInfo("[ObjectPooling] Manager initialized.");
         }
@@ -27,18 +33,34 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             int prefabHash = prefabName.GetStableHashCode();
             instance = null;
 
-            if (_pools.TryGetValue(prefabHash, out Queue<GameObject> pool) && pool.Count > 0)
+            lock (_lockObject) // ✅ НОВОЕ: Thread safety
             {
-                instance = pool.Dequeue();
-                if (instance == null)
+                if (_pools.TryGetValue(prefabHash, out Queue<GameObject> pool) && pool.Count > 0)
                 {
-                    return TryGetObject(prefabName, out instance);
-                }
+                    instance = pool.Dequeue();
 
-                // ДОБАВЛЕНО: Сброс состояния перед выдачей из пула
-                ResetObjectState(instance);
-                return true;
+                    // ✅ НОВОЕ: Проверка на null и повторное использование
+                    if (instance == null)
+                    {
+                        return TryGetObject(prefabName, out instance);
+                    }
+
+                    // ✅ КРИТИЧНО: Проверяем, не используется ли уже объект
+                    if (_objectsInUse.Contains(instance))
+                    {
+                        Plugin.Log.LogError($"[ObjectPooling] CRITICAL: Object already in use! {prefabName}");
+                        return TryGetObject(prefabName, out instance); // Берем следующий
+                    }
+
+                    // Отмечаем как используемый
+                    _objectsInUse.Add(instance);
+
+                    // Сброс состояния
+                    ResetObjectState(instance);
+                    return true;
+                }
             }
+
             return false;
         }
 
@@ -46,46 +68,60 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
         {
             if (instance == null) return;
 
-            // ДОБАВЛЕНО: Полная очистка состояния перед возвратом в пул
-            CleanupObjectState(instance);
-
-            instance.transform.SetParent(null);
-            instance.SetActive(false);
-            instance.transform.SetParent(_poolParent);
-
-            var pooledObj = instance.GetComponent<PooledObject>();
-            int prefabHash;
-
-            if (pooledObj != null)
+            lock (_lockObject) // ✅ НОВОЕ: Thread safety
             {
-                prefabHash = pooledObj.PrefabHash;
-            }
-            else
-            {
-                string prefabName = instance.name.Replace("(Clone)", "");
-                prefabHash = prefabName.GetStableHashCode();
-            }
+                // ✅ НОВОЕ: Проверяем, был ли объект выдан из пула
+                if (!_objectsInUse.Contains(instance))
+                {
+                    // Объект не из пула - просто уничтожаем
+                    Object.Destroy(instance);
+                    return;
+                }
 
-            if (!_pools.TryGetValue(prefabHash, out Queue<GameObject> pool))
-            {
-                pool = new Queue<GameObject>();
-                _pools.Add(prefabHash, pool);
-            }
+                // Убираем из списка активных
+                _objectsInUse.Remove(instance);
 
-            if (pool.Count < MAX_POOL_SIZE)
-            {
-                pool.Enqueue(instance);
-            }
-            else
-            {
-                Object.Destroy(instance);
+                // Полная очистка состояния
+                CleanupObjectState(instance);
 
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogWarning($"[ObjectPooling] Pool full ({MAX_POOL_SIZE}). Destroying excess object.");
+                instance.transform.SetParent(null);
+                instance.SetActive(false);
+                instance.transform.SetParent(_poolParent);
+
+                var pooledObj = instance.GetComponent<PooledObject>();
+                int prefabHash;
+
+                if (pooledObj != null)
+                {
+                    prefabHash = pooledObj.PrefabHash;
+                    pooledObj.MarkAsAvailable(); // ✅ НОВОЕ: Отмечаем как доступный
+                }
+                else
+                {
+                    string prefabName = instance.name.Replace("(Clone)", "");
+                    prefabHash = prefabName.GetStableHashCode();
+                }
+
+                if (!_pools.TryGetValue(prefabHash, out Queue<GameObject> pool))
+                {
+                    pool = new Queue<GameObject>();
+                    _pools.Add(prefabHash, pool);
+                }
+
+                if (pool.Count < MAX_POOL_SIZE)
+                {
+                    pool.Enqueue(instance);
+                }
+                else
+                {
+                    Object.Destroy(instance);
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogWarning($"[ObjectPooling] Pool full ({MAX_POOL_SIZE}). Destroying excess object.");
+                }
             }
         }
 
-        // НОВЫЙ МЕТОД: Очистка состояния при возврате в пул
         private static void CleanupObjectState(GameObject instance)
         {
             try
@@ -96,14 +132,13 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                 {
                     rb.velocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
-                    rb.Sleep(); // Усыпляем физику
+                    rb.Sleep();
                 }
 
-                // 2. Очистка ItemDrop (без рефлексии - безопасно)
+                // 2. Очистка ItemDrop
                 var itemDrop = instance.GetComponent<ItemDrop>();
                 if (itemDrop != null)
                 {
-                    // Отключаем коллизию на время нахождения в пуле
                     var collider = instance.GetComponent<Collider>();
                     if (collider != null)
                         collider.enabled = false;
@@ -119,7 +154,17 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     }
                 }
 
-                // 4. Сброс позиции в безопасное место
+                // 4. ✅ НОВОЕ: Очистка аудио
+                var audioSources = instance.GetComponentsInChildren<AudioSource>(true);
+                foreach (var audio in audioSources)
+                {
+                    if (audio != null)
+                    {
+                        audio.Stop();
+                    }
+                }
+
+                // 5. Сброс позиции
                 instance.transform.position = new Vector3(0, -10000, 0);
                 instance.transform.rotation = Quaternion.identity;
 
@@ -128,12 +173,10 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             }
             catch (System.Exception e)
             {
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogError($"[ObjectPooling] Error cleaning up object state: {e.Message}");
+                Plugin.Log.LogError($"[ObjectPooling] Error cleaning up object: {e.Message}");
             }
         }
 
-        // НОВЫЙ МЕТОД: Восстановление состояния при выдаче из пула
         private static void ResetObjectState(GameObject instance)
         {
             try
@@ -145,7 +188,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     rb.WakeUp();
                 }
 
-                // 2. Включаем коллайдер обратно
+                // 2. Включаем коллайдер
                 var collider = instance.GetComponent<Collider>();
                 if (collider != null)
                     collider.enabled = true;
@@ -155,7 +198,31 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             }
             catch (System.Exception e)
             {
-                Plugin.Log.LogError($"[ObjectPooling] Error resetting object state: {e.Message}");
+                Plugin.Log.LogError($"[ObjectPooling] Error resetting object: {e.Message}");
+            }
+        }
+
+        // ✅ НОВОЕ: Метод для прогрева пула
+        public static void WarmupPool(string prefabName, int count)
+        {
+            // Эта функция будет реализована при создании объектов
+            Plugin.Log.LogInfo($"[ObjectPooling] Warmup requested for {prefabName} (x{count})");
+        }
+
+        // ✅ НОВОЕ: Статистика для дебага
+        public static void LogPoolStats()
+        {
+            if (!Plugin.DebugLoggingEnabled.Value) return;
+
+            lock (_lockObject)
+            {
+                int totalPooled = 0;
+                foreach (var pool in _pools.Values)
+                {
+                    totalPooled += pool.Count;
+                }
+
+                Plugin.Log.LogInfo($"[ObjectPooling] Stats - In use: {_objectsInUse.Count}, Pooled: {totalPooled}");
             }
         }
     }

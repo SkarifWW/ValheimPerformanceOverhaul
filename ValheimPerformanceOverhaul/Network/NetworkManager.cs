@@ -5,14 +5,6 @@ using System.IO;
 using System.Reflection;
 using ZstdSharp;
 
-
-using HarmonyLib;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
-using ZstdSharp;
-using System;
-
 namespace ValheimPerformanceOverhaul.Network
 {
     internal static class NetworkUtils
@@ -34,6 +26,7 @@ namespace ValheimPerformanceOverhaul.Network
         {
             if (rpc == null) return;
             _compressionEnabledPeers[rpc] = enabled;
+
             if (Plugin.DebugLoggingEnabled.Value)
             {
                 var socket = NetworkUtils.GetSocket(rpc);
@@ -59,11 +52,14 @@ namespace ValheimPerformanceOverhaul.Network
 
     internal static class CompressorManager
     {
-        // --- ИСПРАВЛЕНИЕ 3: Возвращаемся к созданию экземпляров, но используем DictBase ---
         private static Compressor _compressor;
         private static Decompressor _decompressor;
-        private static byte[] _dictBytes; // Храним байты словаря
+        private static byte[] _dictBytes;
         private static bool _isInitialized = false;
+
+        // ✅ НОВОЕ: Настройки сжатия
+        private static int _compressionThreshold = 128; // Минимальный размер для сжатия
+        private static float _minCompressionRatio = 0.95f; // Минимальная эффективность сжатия
 
         public static void Initialize()
         {
@@ -71,8 +67,7 @@ namespace ValheimPerformanceOverhaul.Network
 
             try
             {
-                // Создаем экземпляры без словаря сразу
-                _compressor = new Compressor(1); // Уровень сжатия 1 - быстрый
+                _compressor = new Compressor(1); // Уровень 1 - быстрый
                 _decompressor = new Decompressor();
 
                 var assembly = Assembly.GetExecutingAssembly();
@@ -84,7 +79,6 @@ namespace ValheimPerformanceOverhaul.Network
                         {
                             stream.CopyTo(memoryStream);
                             _dictBytes = memoryStream.ToArray();
-                            // Загружаем словарь в существующие экземпляры
                             _compressor.LoadDictionary(_dictBytes);
                             _decompressor.LoadDictionary(_dictBytes);
                             Plugin.Log.LogInfo("[Network] Zstd compressor initialized with dictionary.");
@@ -92,9 +86,13 @@ namespace ValheimPerformanceOverhaul.Network
                     }
                     else
                     {
-                        Plugin.Log.LogWarning("[Network] Zstd dictionary not found. Compressor initialized without it (lower efficiency).");
+                        Plugin.Log.LogWarning("[Network] Zstd dictionary not found. Compressor initialized without it.");
                     }
                 }
+
+                // Загружаем настройки из конфига
+                _compressionThreshold = Plugin.NetworkCompressionThreshold?.Value ?? 128;
+
                 _isInitialized = true;
             }
             catch (System.Exception e)
@@ -105,20 +103,67 @@ namespace ValheimPerformanceOverhaul.Network
 
         public static byte[] Compress(byte[] data)
         {
-            if (!_isInitialized || _compressor == null || data == null || data.Length == 0) return data;
-            // Используем метод Wrap экземпляра
-            return _compressor.Wrap(new ReadOnlySpan<byte>(data)).ToArray();
+            if (!_isInitialized || _compressor == null || data == null || data.Length == 0)
+                return data;
+
+            // ✅ ИСПРАВЛЕНО: Проверяем размер перед сжатием
+            if (data.Length < _compressionThreshold)
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[Network] Skipping compression for small packet ({data.Length} bytes)");
+                return data;
+            }
+
+            try
+            {
+                byte[] compressed = _compressor.Wrap(new ReadOnlySpan<byte>(data)).ToArray();
+
+                // ✅ ИСПРАВЛЕНО: Проверяем эффективность сжатия
+                float compressionRatio = (float)compressed.Length / data.Length;
+
+                if (compressionRatio >= _minCompressionRatio)
+                {
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Network] Compression ineffective ({compressionRatio:F2}), using original data");
+                    return data;
+                }
+
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[Network] Compressed {data.Length} → {compressed.Length} bytes (ratio: {compressionRatio:F2})");
+
+                return compressed;
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[Network] Compression failed: {e.Message}");
+                return data;
+            }
         }
 
         public static byte[] Decompress(byte[] data)
         {
-            if (!_isInitialized || _decompressor == null || data == null || data.Length < 4) return data;
+            if (!_isInitialized || _decompressor == null || data == null || data.Length < 4)
+                return data;
 
+            // Проверяем магическое число Zstd
             uint magic = (uint)((data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0]);
-            if (magic != 0xFD2FB528) return data;
+            if (magic != 0xFD2FB528)
+                return data; // Не сжатые данные
 
-            // Используем метод Unwrap экземпляра
-            return _decompressor.Unwrap(new ReadOnlySpan<byte>(data)).ToArray();
+            try
+            {
+                byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(data)).ToArray();
+
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[Network] Decompressed {data.Length} → {decompressed.Length} bytes");
+
+                return decompressed;
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Log.LogError($"[Network] Decompression failed: {e.Message}");
+                return data;
+            }
         }
     }
 }

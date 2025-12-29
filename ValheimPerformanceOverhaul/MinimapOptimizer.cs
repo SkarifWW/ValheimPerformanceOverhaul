@@ -1,95 +1,87 @@
 ﻿using HarmonyLib;
+using System.Reflection;
 using UnityEngine;
+using ValheimPerformanceOverhaul;
+using HarmonyLib;
+using UnityEngine;
+using System.Reflection;
 
-namespace ValheimPerformanceOverhaul.UI
+namespace ValheimPerformanceOverhaul
 {
     [HarmonyPatch]
-    public static class MinimapPatches
+    public static class MinimapOptimizer
     {
-        // ПАТЧ 1: Снижаем разрешение текстуры миникарты
-        [HarmonyPatch(typeof(Minimap), "Awake")]
-        [HarmonyPostfix]
-        private static void ReduceMinimapResolution(Minimap __instance)
+        // Кэшируем поля через рефлексию, используя ПРАВИЛЬНЫЕ имена для новой версии игры
+        private static FieldInfo _smallRootField = AccessTools.Field(typeof(Minimap), "m_smallRoot");
+        private static FieldInfo _largeRootField = AccessTools.Field(typeof(Minimap), "m_largeRoot");
+
+        // Флаг, чтобы не спамить ошибками, если поля снова изменят
+        private static bool _fieldsFound = false;
+
+        static MinimapOptimizer()
         {
-            if (!Plugin.MinimapOptimizationEnabled.Value) return;
-
-            try
+            // Проверяем, нашли ли мы поля
+            if (_smallRootField != null && _largeRootField != null)
             {
-                int resolution = Plugin.MinimapTextureSize.Value;
-
-                // Получаем поля через рефлексию
-                var mapImageLarge = AccessTools.Field(typeof(Minimap), "m_mapImageLarge");
-                var mapImageSmall = AccessTools.Field(typeof(Minimap), "m_mapImageSmall");
-
-                if (mapImageLarge != null)
-                {
-                    var texture = mapImageLarge.GetValue(__instance) as RenderTexture;
-                    if (texture != null)
-                    {
-                        // Пересоздаем с меньшим разрешением
-                        var newTexture = new RenderTexture(resolution, resolution, 0);
-                        newTexture.name = "MinimapLarge";
-                        mapImageLarge.SetValue(__instance, newTexture);
-
-                        // Очищаем старую текстуру
-                        Object.Destroy(texture);
-                    }
-                }
-
-                if (Plugin.DebugLoggingEnabled.Value)
-                {
-                    Plugin.Log.LogInfo($"[Minimap] Reduced resolution to {resolution}x{resolution}");
-                }
+                _fieldsFound = true;
             }
-            catch (System.Exception e)
+            else
             {
-                Plugin.Log.LogError($"[Minimap] Failed to optimize: {e.Message}");
+                // Если не нашли новые имена, пробуем старые (на всякий случай для совместимости)
+                if (_smallRootField == null) _smallRootField = AccessTools.Field(typeof(Minimap), "m_smallMapPanel");
+                if (_largeRootField == null) _largeRootField = AccessTools.Field(typeof(Minimap), "m_largeMapPanel");
+
+                _fieldsFound = (_smallRootField != null && _largeRootField != null);
+
+                if (!_fieldsFound)
+                {
+                    Plugin.Log.LogWarning("[MinimapOptimizer] Could not find Minimap root fields. Optimization disabled.");
+                }
             }
         }
 
-        // ПАТЧ 2: Снижаем частоту обновления карты
         [HarmonyPatch(typeof(Minimap), "Update")]
         [HarmonyPrefix]
-        private static bool ThrottleMinimapUpdate(Minimap __instance)
+        private static bool Minimap_Update_Prefix(Minimap __instance)
         {
-            if (!Plugin.MinimapOptimizationEnabled.Value) return true;
+            // Если поля не найдены или оптимизация выключена в конфиге — выполняем оригинальный код
+            if (!_fieldsFound) return true;
 
-            // Обновляем миникарту только каждый N-й кадр
-            int updateInterval = Plugin.MinimapUpdateInterval.Value;
+            // Логика оптимизации:
+            // Если открыта большая карта, нет смысла обновлять маленькую и наоборот.
+            // Но в оригинальном коде это уже частично учтено.
 
-            if (Time.frameCount % updateInterval != 0)
+            // Мы можем добавить пропуск обновления, если игрок не двигается
+            if (Player.m_localPlayer == null) return true;
+
+            // Если карта открыта (режим Large), обновляем как обычно
+            if (__instance.m_mode == Minimap.MapMode.Large) return true;
+
+            // Если карта маленькая (Small), проверяем, нужно ли обновлять
+            // Например, если мы стоим на месте и не вращаем камеру
+            if (__instance.m_mode == Minimap.MapMode.Small)
             {
-                return false; // Пропускаем обновление
-            }
+                // Получаем объекты UI
+                GameObject smallRoot = (GameObject)_smallRootField.GetValue(__instance);
 
-            return true; // Выполняем обновление
-        }
-
-        // ПАТЧ 3: Отключаем обновление когда карта закрыта
-        [HarmonyPatch(typeof(Minimap), "Update")]
-        [HarmonyPrefix]
-        private static bool DisableWhenClosed(Minimap __instance)
-        {
-            if (!Plugin.MinimapOptimizationEnabled.Value) return true;
-
-            // Если карта вообще не видна - не обновляем
-            var largePanelField = AccessTools.Field(typeof(Minimap), "m_largeMapPanel");
-            var smallPanelField = AccessTools.Field(typeof(Minimap), "m_smallMapPanel");
-
-            if (largePanelField != null && smallPanelField != null)
-            {
-                var largePanel = largePanelField.GetValue(__instance) as GameObject;
-                var smallPanel = smallPanelField.GetValue(__instance) as GameObject;
-
-                bool largeActive = largePanel != null && largePanel.activeSelf;
-                bool smallActive = smallPanel != null && smallPanel.activeSelf;
-
-                // Если обе панели закрыты - не обновляем
-                if (!largeActive && !smallActive)
+                // Если UI выключен (например, через Ctrl+F3), не тратим ресурсы
+                if (smallRoot != null && !smallRoot.activeInHierarchy)
                 {
-                    return false;
+                    return false; // Пропускаем Update
                 }
             }
+
+            return true;
+        }
+
+        // Патч для оптимизации отрисовки иконок карты (MapPin)
+        // Вызывается часто, поэтому стоит проверить валидность
+        [HarmonyPatch(typeof(Minimap), "UpdateDynamicPins")]
+        [HarmonyPrefix]
+        private static bool UpdateDynamicPins_Prefix(Minimap __instance)
+        {
+            // Если карта закрыта и миникарта выключена, не обновляем пины
+            if (__instance.m_mode == Minimap.MapMode.None) return false;
 
             return true;
         }

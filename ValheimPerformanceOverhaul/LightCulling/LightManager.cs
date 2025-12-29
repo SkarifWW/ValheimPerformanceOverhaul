@@ -1,16 +1,15 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace ValheimPerformanceOverhaul.LightCulling
 {
     public enum LightPriority
     {
-        Critical = 0,    // Игрок, NPC, важные объекты
-        High = 1,        // Костры, печи, активные источники
-        Medium = 2,      // Факелы, свечи в базе
-        Low = 3,         // Декоративное освещение
-        VeryLow = 4      // Дальние факелы, фоновое освещение
+        Critical = 0,
+        High = 1,
+        Medium = 2,
+        Low = 3,
+        VeryLow = 4
     }
 
     public class TrackedLight : MonoBehaviour
@@ -46,18 +45,15 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
 
-            // Проверяем родителя и тип объекта
             var parentName = transform.parent != null ? transform.parent.name.ToLower() : "";
             var objectName = gameObject.name.ToLower();
 
-            // Критичные источники (игрок, важные NPC)
             if (transform.root.GetComponent<Player>() != null)
             {
                 Priority = LightPriority.Critical;
                 return;
             }
 
-            // Высокий приоритет (активные источники)
             if (parentName.Contains("fire") || parentName.Contains("hearth") ||
                 parentName.Contains("brazier") || objectName.Contains("fire"))
             {
@@ -65,7 +61,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
 
-            // Средний приоритет (факелы, свечи)
             if (parentName.Contains("torch") || parentName.Contains("candle") ||
                 objectName.Contains("torch") || objectName.Contains("candle"))
             {
@@ -73,7 +68,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
 
-            // Яркие источники = выше приоритет
             if (LightSource.intensity > 2.0f)
             {
                 Priority = LightPriority.High;
@@ -102,7 +96,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                     LightSource.intensity = 0f;
                     LightSource.range = 0f;
 
-                    // НОВОЕ: Опциональное отключение теней
                     if (disableShadows && _hadShadows)
                     {
                         _originalShadows = LightSource.shadows;
@@ -117,7 +110,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                     LightSource.intensity = _originalIntensity;
                     LightSource.range = _originalRange;
 
-                    // Восстанавливаем тени только если они были
                     if (_hadShadows)
                     {
                         LightSource.shadows = _originalShadows;
@@ -131,7 +123,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
         public void SetShadowsOnly(bool enabled)
         {
             if (LightSource == null || !_hadShadows) return;
-
             LightSource.shadows = enabled ? _originalShadows : LightShadows.None;
         }
 
@@ -153,19 +144,21 @@ namespace ValheimPerformanceOverhaul.LightCulling
             public float DistanceSqr;
             public LightPriority Priority;
         }
+
         private LightInfo[] _lightInfos = new LightInfo[512];
         private int _lightInfoCount = 0;
 
         private float _updateTimer;
         private float _scanTimer;
+        private int _cleanupCounter = 0; // ✅ НОВОЕ
+
         private const float UPDATE_INTERVAL = 0.25f;
         private const float SCAN_INTERVAL = 5f;
 
-        // НОВЫЕ НАСТРОЙКИ
         private int _maxActiveLights = 15;
-        private int _maxShadowCasters = 5; // Отдельный лимит для теней!
+        private int _maxShadowCasters = 5;
         private float _lightCullDistance = 60f;
-        private float _shadowCullDistance = 30f; // Тени отключаем раньше
+        private float _shadowCullDistance = 30f;
 
         private void Awake()
         {
@@ -175,7 +168,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
             Instance = this;
-
             LoadConfig();
         }
 
@@ -183,10 +175,8 @@ namespace ValheimPerformanceOverhaul.LightCulling
         {
             _maxActiveLights = Plugin.MaxActiveLights?.Value ?? 15;
             _lightCullDistance = Plugin.LightCullDistance?.Value ?? 60f;
-
-            // НОВЫЕ КОНФИГИ (добавьте в Plugin.cs)
-            // _maxShadowCasters = Plugin.MaxShadowCasters?.Value ?? 5;
-            // _shadowCullDistance = Plugin.ShadowCullDistance?.Value ?? 30f;
+            _maxShadowCasters = Plugin.MaxShadowCasters?.Value ?? 5;
+            _shadowCullDistance = Plugin.ShadowCullDistance?.Value ?? 30f;
         }
 
         private void Start()
@@ -197,9 +187,9 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
 
-            Plugin.Log.LogInfo("[AdvancedLightCulling] Starting with shadow management...");
+            Plugin.Log.LogInfo("[LightCulling] Advanced manager starting...");
             PerformLightScan();
-            Plugin.Log.LogInfo($"[AdvancedLightCulling] Found {_allLights.Count} lights.");
+            Plugin.Log.LogInfo($"[LightCulling] Found {_allLights.Count} lights.");
         }
 
         private void PerformLightScan()
@@ -216,9 +206,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (light == null || light.GetComponent<TrackedLight>() != null) return;
 
             if (light.type == LightType.Directional || light.intensity <= 0.1f)
-            {
                 return;
-            }
 
             var tracked = light.gameObject.AddComponent<TrackedLight>();
             _allLights.Add(tracked);
@@ -260,12 +248,31 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (_updateTimer < UPDATE_INTERVAL) return;
             _updateTimer = 0f;
 
+            // ✅ НОВОЕ: Ленивая очистка (каждые 10 обновлений)
+            _cleanupCounter++;
+            if (_cleanupCounter >= 10)
+            {
+                _cleanupCounter = 0;
+                CleanupNullLights();
+            }
+
             UpdateLightCulling();
+        }
+
+        // ✅ НОВОЕ: Оптимизированная очистка
+        private void CleanupNullLights()
+        {
+            for (int i = _allLights.Count - 1; i >= 0; i--)
+            {
+                if (_allLights[i] == null || _allLights[i].LightSource == null)
+                {
+                    _allLights.RemoveAt(i);
+                }
+            }
         }
 
         private void UpdateLightCulling()
         {
-            _allLights.RemoveAll(l => l == null || l.LightSource == null);
             if (_allLights.Count == 0) return;
 
             Vector3 cameraPos = Camera.main.transform.position;
@@ -294,7 +301,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
                 else
                 {
-                    // Слишком далеко - полное отключение
                     if (!light.IsCulled)
                     {
                         light.SetCulled(true, true);
@@ -303,19 +309,17 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
             }
 
-            // КРИТИЧНО: Сортируем по приоритету, ЗАТЕМ по расстоянию
-            System.Array.Sort(_lightInfos, 0, _lightInfoCount,
-                Comparer<LightInfo>.Create((a, b) =>
-                {
-                    int priorityCompare = a.Priority.CompareTo(b.Priority);
-                    if (priorityCompare != 0) return priorityCompare;
-                    return a.DistanceSqr.CompareTo(b.DistanceSqr);
-                }));
+            // ✅ ИСПРАВЛЕНО: Используем partial sort (QuickSelect)
+            // Вместо полной сортировки O(n log n) используем частичную O(n)
+            QuickSelectTopN(_lightInfos, _lightInfoCount, _maxActiveLights);
 
             int activeLightCount = 0;
             int shadowCasterCount = 0;
 
-            for (int i = 0; i < _lightInfoCount; i++)
+            // Обрабатываем только топ-N источников
+            int processCount = System.Math.Min(_lightInfoCount, _maxActiveLights * 2);
+
+            for (int i = 0; i < processCount; i++)
             {
                 var info = _lightInfos[i];
                 var light = info.Light;
@@ -325,19 +329,16 @@ namespace ValheimPerformanceOverhaul.LightCulling
                                      shadowCasterCount < _maxShadowCasters &&
                                      light.HasShadows;
 
-                // Решаем, активен ли источник
                 bool shouldBeActive = activeLightCount < _maxActiveLights;
 
                 if (shouldBeActive)
                 {
-                    // Включаем источник
                     if (light.IsCulled)
                     {
                         light.SetCulled(false);
                         _culledLights.Remove(light);
                     }
 
-                    // Управляем тенями отдельно
                     light.SetShadowsOnly(canHaveShadows);
 
                     if (canHaveShadows)
@@ -347,7 +348,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
                 else
                 {
-                    // Отключаем источник
                     if (!light.IsCulled)
                     {
                         light.SetCulled(true, true);
@@ -360,6 +360,65 @@ namespace ValheimPerformanceOverhaul.LightCulling
             {
                 Plugin.Log.LogInfo($"[LightCulling] Active: {activeLightCount}/{_maxActiveLights}, Shadows: {shadowCasterCount}/{_maxShadowCasters}");
             }
+        }
+
+        // ✅ НОВОЕ: QuickSelect алгоритм для частичной сортировки O(n)
+        private void QuickSelectTopN(LightInfo[] array, int length, int topN)
+        {
+            if (length <= topN) return;
+
+            // Сортируем только первые topN элементов
+            int left = 0;
+            int right = length - 1;
+            topN = System.Math.Min(topN, length);
+
+            while (left < right)
+            {
+                int pivotIndex = Partition(array, left, right);
+
+                if (pivotIndex == topN)
+                    break;
+                else if (pivotIndex < topN)
+                    left = pivotIndex + 1;
+                else
+                    right = pivotIndex - 1;
+            }
+
+            // Сортируем только первые topN элементов
+            System.Array.Sort(array, 0, System.Math.Min(topN, length),
+                System.Collections.Generic.Comparer<LightInfo>.Create((a, b) =>
+                {
+                    int priorityCompare = a.Priority.CompareTo(b.Priority);
+                    if (priorityCompare != 0) return priorityCompare;
+                    return a.DistanceSqr.CompareTo(b.DistanceSqr);
+                }));
+        }
+
+        private int Partition(LightInfo[] array, int left, int right)
+        {
+            var pivot = array[right];
+            int i = left - 1;
+
+            for (int j = left; j < right; j++)
+            {
+                int priorityCompare = array[j].Priority.CompareTo(pivot.Priority);
+                bool shouldSwap = priorityCompare < 0 ||
+                    (priorityCompare == 0 && array[j].DistanceSqr < pivot.DistanceSqr);
+
+                if (shouldSwap)
+                {
+                    i++;
+                    var temp = array[i];
+                    array[i] = array[j];
+                    array[j] = temp;
+                }
+            }
+
+            var temp2 = array[i + 1];
+            array[i + 1] = array[right];
+            array[right] = temp2;
+
+            return i + 1;
         }
 
         public void ForceUpdate()

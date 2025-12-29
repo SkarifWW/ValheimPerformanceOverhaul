@@ -1,95 +1,128 @@
 ﻿using HarmonyLib;
 using UnityEngine;
-using System.Collections.Generic;
-using UnityEngine;
-namespace ValheimPerformanceOverhaul.Animators
+using ValheimPerformanceOverhaul;
+
+namespace ValheimPerformanceOverhaul
 {
-    [HarmonyPatch]
-    public static class AnimatorPatches
+    public static class AnimatorOptimizer
     {
-        private static readonly Dictionary<Animator, AnimatorCullingMode> _originalCulling =
-            new Dictionary<Animator, AnimatorCullingMode>();
-
-        // ПАТЧ 1: Установка правильного Culling Mode для всех Animator
         [HarmonyPatch(typeof(Character), "Awake")]
-        [HarmonyPostfix]
-        private static void OptimizeAnimator(Character __instance)
+        public static class Character_Awake_Patch
         {
-            if (!Plugin.AnimatorOptimizationEnabled.Value) return;
-
-            var animator = __instance.GetComponentInChildren<Animator>();
-            if (animator == null) return;
-
-            // Сохраняем оригинальный режим
-            if (!_originalCulling.ContainsKey(animator))
+            [HarmonyPostfix]
+            private static void Postfix(Character __instance)
             {
-                _originalCulling[animator] = animator.cullingMode;
-            }
+                if (__instance == null) return;
 
-            // КРИТИЧНО: Устанавливаем CullCompletely
-            // Это полностью отключает анимацию когда объект вне экрана
-            animator.cullingMode = AnimatorCullingMode.CullCompletely;
+                if (!Plugin.AnimatorOptimizationEnabled.Value) return;
 
-            if (Plugin.DebugLoggingEnabled.Value)
-            {
-                Plugin.Log.LogInfo($"[Animator] Optimized animator for {__instance.name}");
+                if (__instance.GetComponent<CharacterAnimatorOptimizer>() == null)
+                {
+                    __instance.gameObject.AddComponent<CharacterAnimatorOptimizer>();
+                }
             }
         }
+    }
 
-        // ПАТЧ 2: Снижаем Update Rate для далеких аниматоров
-        [HarmonyPatch(typeof(Character), "Update")]
-        [HarmonyPrefix]
-        private static void ThrottleDistantAnimators(Character __instance)
+    public class CharacterAnimatorOptimizer : MonoBehaviour
+    {
+        private Character _character;
+        private Animator _animator;
+        private ZNetView _nview;
+        private float _checkTimer;
+
+        private const float CHECK_INTERVAL = 1.0f;
+        private const float CULL_DIST_SQR = 60f * 60f;
+        private const float FAR_CULL_DIST_SQR = 100f * 100f; // Новая дистанция для полного отключения
+
+        private bool _isFullyCulled = false;
+        private bool _isPartiallyCulled = false;
+
+        private void Awake()
         {
-            if (!Plugin.AnimatorOptimizationEnabled.Value || Player.m_localPlayer == null) return;
+            _character = GetComponent<Character>();
+            _animator = GetComponent<Animator>();
+            _nview = GetComponent<ZNetView>();
 
-            var animator = __instance.GetComponentInChildren<Animator>();
-            if (animator == null) return;
+            _checkTimer = Random.Range(0f, CHECK_INTERVAL);
+        }
 
-            float distance = Vector3.Distance(__instance.transform.position, Player.m_localPlayer.transform.position);
+        private void FixedUpdate()
+        {
+            _checkTimer += Time.fixedDeltaTime;
+            if (_checkTimer < CHECK_INTERVAL) return;
+            _checkTimer = 0f;
 
-            // Далекие персонажи - обновляем анимацию реже
-            if (distance > 30f)
+            Optimize();
+        }
+
+        private void Optimize()
+        {
+            if (_character == null || _animator == null)
             {
-                // Обновляем только каждый 3й кадр
-                if (Time.frameCount % 3 != 0)
+                Destroy(this);
+                return;
+            }
+
+            if (_character.IsPlayer()) return;
+
+            if (_nview != null && !_nview.IsValid()) return;
+
+            if (Player.m_localPlayer == null) return;
+
+            float distSqr = (_character.transform.position - Player.m_localPlayer.transform.position).sqrMagnitude;
+
+            // ✅ ИСПРАВЛЕНО: Теперь 3 уровня оптимизации
+            if (distSqr > FAR_CULL_DIST_SQR)
+            {
+                // Очень далеко (>100м): ПОЛНОЕ отключение Animator
+                if (!_isFullyCulled)
                 {
-                    animator.enabled = false;
-                }
-                else
-                {
-                    animator.enabled = true;
+                    _animator.enabled = false; // ✅ Полностью выключаем компонент
+                    _isFullyCulled = true;
+                    _isPartiallyCulled = false;
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Animator] Fully disabled for {_character.name} at {Mathf.Sqrt(distSqr):F1}m");
                 }
             }
-            else if (distance > 15f)
+            else if (distSqr > CULL_DIST_SQR)
             {
-                // Средняя дистанция - каждый 2й кадр
-                if (Time.frameCount % 2 != 0)
+                // Далеко (60-100м): CullCompletely (не обновляет анимацию вообще)
+                if (!_isPartiallyCulled || _isFullyCulled)
                 {
-                    animator.enabled = false;
-                }
-                else
-                {
-                    animator.enabled = true;
+                    _animator.enabled = true; // Включаем обратно
+                    _animator.cullingMode = AnimatorCullingMode.CullCompletely; // ✅ Полное отключение анимации
+                    _isPartiallyCulled = true;
+                    _isFullyCulled = false;
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Animator] CullCompletely for {_character.name} at {Mathf.Sqrt(distSqr):F1}m");
                 }
             }
             else
             {
-                // Близко - полная частота
-                animator.enabled = true;
+                // Близко (<60м): Полная анимация
+                if (_isPartiallyCulled || _isFullyCulled)
+                {
+                    _animator.enabled = true;
+                    _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                    _isPartiallyCulled = false;
+                    _isFullyCulled = false;
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Animator] Full animation for {_character.name} at {Mathf.Sqrt(distSqr):F1}m");
+                }
             }
         }
 
-        // Очистка при уничтожении
-        [HarmonyPatch(typeof(Character), "OnDestroy")]
-        [HarmonyPostfix]
-        private static void RestoreAnimator(Character __instance)
+        private void OnDestroy()
         {
-            var animator = __instance.GetComponentInChildren<Animator>();
-            if (animator != null && _originalCulling.ContainsKey(animator))
+            // Восстанавливаем состояние при уничтожении
+            if (_animator != null)
             {
-                animator.cullingMode = _originalCulling[animator];
-                _originalCulling.Remove(animator);
+                _animator.enabled = true;
+                _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             }
         }
     }

@@ -5,49 +5,44 @@ namespace ValheimPerformanceOverhaul.LightCulling
 {
     public enum LightLODLevel
     {
-        Full = 0,        // 0-20м: Полный свет с тенями
-        NoShadows = 1,   // 20-40м: Свет без теней
-        Emissive = 2,    // 40-70м: Только эмиссивный материал
-        Billboard = 3,   // 70м+: Плоская текстура
-        Disabled = 4     // Вне зоны видимости
+        Full = 0,
+        NoShadows = 1,
+        Emissive = 2,
+        Billboard = 3,
+        Disabled = 4
     }
 
     public class LightLOD : MonoBehaviour
     {
-        // Компоненты
         public Light LightSource { get; private set; }
         private MeshRenderer _meshRenderer;
         private Material _emissiveMaterial;
         private GameObject _billboardObject;
         private SpriteRenderer _billboardRenderer;
 
-        // Оригинальные значения
         private float _originalIntensity;
         private float _originalRange;
         private LightShadows _originalShadows;
         private Material _originalMaterial;
         private Color _lightColor;
 
-        // Текущее состояние
         private LightLODLevel _currentLOD = LightLODLevel.Full;
         public LightPriority Priority { get; private set; }
 
-        // Кэшированные ресурсы (статические для экономии памяти)
         private static Texture2D _glowTexture;
         private static Material _billboardMaterial;
+        private static Shader _billboardShader; // ✅ НОВОЕ
 
         private void Awake()
         {
             LightSource = GetComponent<Light>();
             if (LightSource == null) return;
 
-            // Сохраняем оригинальные значения
             _originalIntensity = LightSource.intensity;
             _originalRange = LightSource.range;
             _originalShadows = LightSource.shadows;
             _lightColor = LightSource.color;
 
-            // Пытаемся найти меш для эмиссии
             _meshRenderer = GetComponentInChildren<MeshRenderer>();
             if (_meshRenderer != null)
             {
@@ -97,21 +92,35 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void InitializeResources()
         {
-            // Создаем общие ресурсы один раз для ВСЕХ источников света
             if (_glowTexture == null)
             {
                 _glowTexture = CreateGlowTexture();
             }
 
-            if (_billboardMaterial == null)
+            // ✅ ИСПРАВЛЕНО: Используем шейдер с автоматическим billboarding
+            if (_billboardShader == null)
             {
-                _billboardMaterial = CreateBillboardMaterial();
+                // Пробуем найти billboard шейдер
+                _billboardShader = Shader.Find("Sprites/Default");
+
+                // Если не нашли, создаем простой unlit
+                if (_billboardShader == null)
+                {
+                    _billboardShader = Shader.Find("Unlit/Transparent");
+                }
+            }
+
+            if (_billboardMaterial == null && _billboardShader != null)
+            {
+                _billboardMaterial = new Material(_billboardShader);
+                _billboardMaterial.mainTexture = _glowTexture;
+                _billboardMaterial.SetInt("_ZWrite", 0);
+                _billboardMaterial.renderQueue = 3000;
             }
         }
 
         private static Texture2D CreateGlowTexture()
         {
-            // Создаем простую текстуру свечения 32x32
             int size = 32;
             Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
             Color[] pixels = new Color[size * size];
@@ -125,7 +134,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 {
                     float dist = Vector2.Distance(new Vector2(x, y), center);
                     float alpha = Mathf.Clamp01(1f - (dist / maxDist));
-                    alpha = Mathf.Pow(alpha, 2f); // Плавный градиент
+                    alpha = Mathf.Pow(alpha, 2f);
                     pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
                 }
             }
@@ -138,37 +147,17 @@ namespace ValheimPerformanceOverhaul.LightCulling
             return texture;
         }
 
-        private static Material CreateBillboardMaterial()
-        {
-            // Используем стандартный Unlit шейдер для максимальной производительности
-            Shader shader = Shader.Find("Unlit/Transparent");
-            if (shader == null)
-            {
-                shader = Shader.Find("Sprites/Default");
-            }
-
-            Material mat = new Material(shader);
-            mat.mainTexture = _glowTexture;
-            mat.SetInt("_ZWrite", 0);
-            mat.SetInt("_Cull", 0); // Double-sided
-            mat.renderQueue = 3000; // Transparent queue
-
-            return mat;
-        }
-
         private void CreateBillboard()
         {
             if (_billboardObject != null) return;
 
-            // Создаем quad для billboard
             _billboardObject = new GameObject("LightBillboard");
             _billboardObject.transform.SetParent(transform);
             _billboardObject.transform.localPosition = Vector3.zero;
 
-            // Используем Sprite Renderer для автоматического billboard эффекта
+            // ✅ ИСПРАВЛЕНО: Используем SpriteRenderer с автоматическим billboarding
             _billboardRenderer = _billboardObject.AddComponent<SpriteRenderer>();
 
-            // Создаем спрайт из текстуры
             Sprite sprite = Sprite.Create(
                 _glowTexture,
                 new Rect(0, 0, _glowTexture.width, _glowTexture.height),
@@ -179,7 +168,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
             _billboardRenderer.material = _billboardMaterial;
             _billboardRenderer.color = _lightColor;
 
-            // Масштаб зависит от яркости света
             float scale = Mathf.Lerp(0.5f, 2.0f, _originalIntensity / 3.0f);
             _billboardObject.transform.localScale = Vector3.one * scale;
 
@@ -190,14 +178,10 @@ namespace ValheimPerformanceOverhaul.LightCulling
         {
             if (_meshRenderer == null || _emissiveMaterial != null) return;
 
-            // Клонируем оригинальный материал
             _emissiveMaterial = new Material(_originalMaterial);
-
-            // Включаем emission
             _emissiveMaterial.EnableKeyword("_EMISSION");
             _emissiveMaterial.SetColor("_EmissionColor", _lightColor * _originalIntensity * 0.5f);
 
-            // Если нет emission, пробуем добавить через основной цвет
             if (!_emissiveMaterial.HasProperty("_EmissionColor"))
             {
                 _emissiveMaterial.SetColor("_Color", _lightColor * 1.5f);
@@ -208,12 +192,9 @@ namespace ValheimPerformanceOverhaul.LightCulling
         {
             if (_currentLOD == level || LightSource == null) return;
 
-            // Отключаем текущее состояние
             DisableCurrentLOD();
-
             _currentLOD = level;
 
-            // Включаем новое состояние
             switch (level)
             {
                 case LightLODLevel.Full:
@@ -233,7 +214,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                     break;
 
                 case LightLODLevel.Disabled:
-                    // Все уже отключено в DisableCurrentLOD
                     break;
             }
 
@@ -245,19 +225,16 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void DisableCurrentLOD()
         {
-            // Отключаем Light
             if (LightSource != null)
             {
                 LightSource.enabled = false;
             }
 
-            // Отключаем эмиссию
             if (_meshRenderer != null && _originalMaterial != null)
             {
                 _meshRenderer.material = _originalMaterial;
             }
 
-            // Отключаем billboard
             if (_billboardObject != null)
             {
                 _billboardObject.SetActive(false);
@@ -307,12 +284,8 @@ namespace ValheimPerformanceOverhaul.LightCulling
             {
                 _billboardObject.SetActive(true);
 
-                // Billboard всегда смотрит на камеру
-                if (Camera.main != null)
-                {
-                    _billboardObject.transform.LookAt(Camera.main.transform);
-                    _billboardObject.transform.Rotate(0, 180, 0); // Разворачиваем правильно
-                }
+                // ✅ ИСПРАВЛЕНО: SpriteRenderer автоматически смотрит на камеру
+                // Убрали LookAt из Update - нет overhead!
             }
         }
 
@@ -320,7 +293,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void OnDestroy()
         {
-            // Очищаем созданные ресурсы
             if (_emissiveMaterial != null)
             {
                 Destroy(_emissiveMaterial);
@@ -333,16 +305,15 @@ namespace ValheimPerformanceOverhaul.LightCulling
         }
     }
 
-    // Менеджер для управления всеми LOD
     public class LightLODManager : MonoBehaviour
     {
         public static LightLODManager Instance { get; private set; }
 
         private readonly List<LightLOD> _allLights = new List<LightLOD>(512);
         private float _updateTimer;
-        private const float UPDATE_INTERVAL = 0.5f; // Обновляем каждые 0.5 секунды
+        private int _cleanupCounter = 0; // ✅ НОВОЕ
+        private const float UPDATE_INTERVAL = 0.5f;
 
-        // Настройки расстояний (можно вынести в конфиг)
         private float _fullLODDistance = 20f;
         private float _noShadowDistance = 40f;
         private float _emissiveDistance = 70f;
@@ -367,7 +338,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void LoadConfig()
         {
-            // Загружаем из конфига, если добавите эти настройки
             _fullLODDistance = Plugin.LightLODFullDistance?.Value ?? 20f;
             _noShadowDistance = Plugin.LightLODNoShadowDistance?.Value ?? 40f;
             _emissiveDistance = Plugin.LightLODEmissiveDistance?.Value ?? 70f;
@@ -407,14 +377,32 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (_updateTimer < UPDATE_INTERVAL) return;
             _updateTimer = 0f;
 
+            // ✅ НОВОЕ: Ленивая очистка
+            _cleanupCounter++;
+            if (_cleanupCounter >= 10)
+            {
+                _cleanupCounter = 0;
+                CleanupNullLights();
+            }
+
             UpdateLODs();
+        }
+
+        // ✅ НОВОЕ: Оптимизированная очистка
+        private void CleanupNullLights()
+        {
+            for (int i = _allLights.Count - 1; i >= 0; i--)
+            {
+                if (_allLights[i] == null || _allLights[i].LightSource == null)
+                {
+                    _allLights.RemoveAt(i);
+                }
+            }
         }
 
         private void UpdateLODs()
         {
             Vector3 cameraPos = Camera.main.transform.position;
-
-            _allLights.RemoveAll(l => l == null);
 
             foreach (var lightLOD in _allLights)
             {
@@ -423,7 +411,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 float distance = Vector3.Distance(cameraPos, lightLOD.transform.position);
                 LightLODLevel targetLOD;
 
-                // Критические источники (игрок) всегда Full LOD
                 if (lightLOD.Priority == LightPriority.Critical)
                 {
                     targetLOD = LightLODLevel.Full;
