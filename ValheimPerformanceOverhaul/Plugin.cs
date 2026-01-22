@@ -83,6 +83,10 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<float> PieceColliderDistance;
         public static ConfigEntry<float> PieceSupportCacheDuration;
         public static ConfigEntry<float> PieceUpdateSkipDistance;
+        public static ConfigEntry<bool> DisableRainDamage;
+        public static ConfigEntry<bool> DecorOptimizationEnabled;
+        public static ConfigEntry<bool> SmartSleepEnabled;
+        public static ConfigEntry<float> SleepCheckInterval;
 
         // Секция 11: Particle Optimization
         public static ConfigEntry<bool> ParticleOptimizationEnabled;
@@ -466,6 +470,10 @@ namespace ValheimPerformanceOverhaul
                 new ConfigDescription(
                     "Distance at which building pieces stop updating entirely.",
                     new AcceptableValueRange<float>(30f, 150f)));
+            DisableRainDamage = Config.Bind("10. Piece Optimization", "Disable Rain Damage", true, "Disables rain damage calculations for all pieces.");
+            DecorOptimizationEnabled = Config.Bind("10. Piece Optimization", "Optimize Decor", true, "Removes rigidbodies and colliders from non-interactive decor.");
+            SmartSleepEnabled = Config.Bind("10. Piece Optimization", "Smart Sleep Mode", true, "Completely disables physics/logic for stable buildings until they take damage.");
+            SleepCheckInterval = Config.Bind("10. Piece Optimization", "Sleep Check Interval", 5.0f, "How often to check if an object can go to sleep.");
 
             // Секция 11: Particle Optimization
             ParticleOptimizationEnabled = Config.Bind(

@@ -127,21 +127,12 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             try
             {
                 // 1. Сброс физики
-                var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
-                foreach (var rb in rigidbodies)
+                var rb = instance.GetComponent<Rigidbody>();
+                if (rb != null)
                 {
-                    if (rb != null)
-                    {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[ObjectPooling] Cleanup Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}, velocity: {rb.velocity}");
-
-                        if (!rb.isKinematic)
-                        {
-                            rb.velocity = Vector3.zero;
-                            rb.angularVelocity = Vector3.zero;
-                            rb.Sleep();
-                        }
-                    }
+                    rb.velocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                    rb.Sleep();
                 }
 
                 // 2. Очистка ItemDrop
@@ -191,19 +182,10 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             try
             {
                 // 1. Пробуждаем физику
-                var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
-                foreach (var rb in rigidbodies)
+                var rb = instance.GetComponent<Rigidbody>();
+                if (rb != null)
                 {
-                    if (rb != null)
-                    {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[ObjectPooling] Reset Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}");
-
-                        if (!rb.isKinematic)
-                        {
-                            rb.WakeUp();
-                        }
-                    }
+                    rb.WakeUp();
                 }
 
                 // 2. Включаем коллайдер

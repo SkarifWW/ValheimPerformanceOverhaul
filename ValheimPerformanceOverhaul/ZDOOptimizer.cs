@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 namespace ValheimPerformanceOverhaul.Network
 {
+    [HarmonyPatch]
     public static class ZDOOptimizationPatches
     {
         private static readonly Dictionary<ZDO, float> _lastSyncTime = new Dictionary<ZDO, float>();
@@ -30,19 +31,10 @@ namespace ValheimPerformanceOverhaul.Network
                 // Проверяем, является ли объект статичным (постройка)
                 if (IsStaticZDO(zdo))
                 {
-                    // Динамический интервал в зависимости от дистанции
-                    float interval = _syncInterval;
-                    if (Player.m_localPlayer != null)
-                    {
-                        float dist = Vector3.Distance(zdo.GetPosition(), Player.m_localPlayer.transform.position);
-                        if (dist > 60f) interval *= 2f; // 4 секунды
-                        if (dist > 120f) interval *= 4f; // 8 секунд
-                    }
-
                     // Проверяем, когда последний раз синхронизировали
                     if (_lastSyncTime.TryGetValue(zdo, out float lastSync))
                     {
-                        if (currentTime - lastSync < interval)
+                        if (currentTime - lastSync < _syncInterval)
                         {
                             toRemove.Add(zdo);
                             continue;

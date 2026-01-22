@@ -23,6 +23,10 @@ namespace ValheimPerformanceOverhaul
 
         private Transform _transform;
 
+        // ✅ НОВОЕ: Флаг для определения типа объекта
+        private bool _isCharacter = false;
+        private bool _isPiece = false;
+
         private void Awake()
         {
             _transform = transform;
@@ -34,6 +38,10 @@ namespace ValheimPerformanceOverhaul
                 return;
             }
 
+            // ✅ КРИТИЧНО: Определяем тип объекта
+            _isCharacter = GetComponent<Character>() != null;
+            _isPiece = GetComponent<Piece>() != null;
+
             try
             {
                 _cullDistanceSqr = (CullDistance + HYSTERESIS) * (CullDistance + HYSTERESIS);
@@ -41,7 +49,8 @@ namespace ValheimPerformanceOverhaul
 
                 CollectComponents();
 
-                if (Plugin.CullPhysicsEnabled.Value)
+                // ✅ КРИТИЧНО: НЕ собираем Rigidbody у Character
+                if (Plugin.CullPhysicsEnabled.Value && !_isCharacter)
                 {
                     CollectRigidbodies();
                 }
@@ -65,13 +74,22 @@ namespace ValheimPerformanceOverhaul
             {
                 if (component == null) continue;
 
+                // ✅ КРИТИЧНО: Расширенный список исключений
                 if (component == this ||
                     component is ZNetView ||
-                    component is ZSyncTransform)
+                    component is ZSyncTransform ||
+                    component is Rigidbody ||
+                    component is Collider ||
+                    component is Animator ||
+                    component is Character ||      // ✅ НОВОЕ
+                    component is Humanoid ||       // ✅ НОВОЕ
+                    component is Player)           // ✅ НОВОЕ
                 {
                     continue;
                 }
 
+                // ✅ НОВОЕ: Не отключаем MonsterAI и AnimalAI полностью
+                // Только throttling через ShouldUpdateAI()
                 if (Plugin.AiThrottlingEnabled.Value && component is BaseAI)
                 {
                     continue;
@@ -83,6 +101,7 @@ namespace ValheimPerformanceOverhaul
 
         private void CollectRigidbodies()
         {
+            // ✅ КРИТИЧНО: Этот метод вызывается ТОЛЬКО для Piece, НЕ для Character
             var rigidbodies = GetComponentsInChildren<Rigidbody>(true);
             if (rigidbodies == null) return;
 
@@ -208,7 +227,7 @@ namespace ValheimPerformanceOverhaul
                 LogCullingStateChange(enabled);
             }
 
-            // ✅ ИСПРАВЛЕНО: Используем обратный цикл вместо RemoveAll
+            // Отключаем/включаем компоненты
             for (int i = _culledComponents.Count - 1; i >= 0; i--)
             {
                 var component = _culledComponents[i];
@@ -233,9 +252,9 @@ namespace ValheimPerformanceOverhaul
                 }
             }
 
-            if (Plugin.CullPhysicsEnabled.Value)
+            // ✅ КРИТИЧНО: Физику обрабатываем ТОЛЬКО для Piece
+            if (Plugin.CullPhysicsEnabled.Value && !_isCharacter)
             {
-                // ✅ ИСПРАВЛЕНО: Используем список для удаления
                 List<Rigidbody> toRemove = null;
 
                 foreach (var pair in _culledRigidbodies)
@@ -253,24 +272,15 @@ namespace ValheimPerformanceOverhaul
 
                     try
                     {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[DistanceCuller] Rigidbody {rb.gameObject.name} transition: enabled={enabled}, current isKinematic={rb.isKinematic}, target isKinematic={(enabled ? originalIsKinematic : true)}");
-
-                        if (!enabled && !rb.isKinematic)
-                        {
-                            rb.velocity = Vector3.zero;
-                            rb.angularVelocity = Vector3.zero;
-                        }
                         rb.isKinematic = enabled ? originalIsKinematic : true;
                     }
                     catch (System.Exception e)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic on {rb.gameObject.name}: {e.Message}");
+                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic: {e.Message}");
                     }
                 }
 
-                // Очистка мертвых ссылок
                 if (toRemove != null)
                 {
                     foreach (var rb in toRemove)
