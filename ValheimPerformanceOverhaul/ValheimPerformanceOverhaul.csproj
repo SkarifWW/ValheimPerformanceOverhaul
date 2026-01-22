@@ -110,6 +110,32 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+<<<<<<< HEAD
+    <Compile Include="AnimatorOptimizer.cs" />
+    <Compile Include="Audio\AudioPatches.cs" />
+    <Compile Include="Audio\AudioPoolManager.cs" />
+    <Compile Include="DistanceCuller.cs" />
+    <Compile Include="DistanceCullerManager.cs" />
+    <Compile Include="GraphicsPatches.cs" />
+    <Compile Include="JitPatches.cs" />
+    <Compile Include="LightCulling\LightCullingPatches.cs" />
+    <Compile Include="LightCulling\LightLODPatches.cs" />
+    <Compile Include="LightCulling\LightLODSystem.cs" />
+    <Compile Include="LightCulling\LightManager.cs" />
+    <Compile Include="MinimapOptimizer.cs" />
+    <Compile Include="Network\NetworkManager.cs" />
+    <Compile Include="Network\NetworkPatches.cs" />
+    <Compile Include="ObjectPooling\ObjectPoolingPatches.cs" />
+    <Compile Include="ObjectPooling\ObjectPoolManager.cs" />
+    <Compile Include="ObjectPooling\PooledObject.cs" />
+    <Compile Include="ParticleSystemOptimizer.cs" />
+    <Compile Include="Plugin.cs" />
+    <Compile Include="GCPatches.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="StructureOptimizer.cs" />
+    <Compile Include="VegetationOptimizer.cs" />
+    <Compile Include="ZDOOptimizer.cs" />
+=======
     <Compile Include="Source\Core\DebugPatches.cs" />
     <Compile Include="Source\Core\GCPatches.cs" />
     <Compile Include="Source\Core\JitPatches.cs" />
@@ -141,6 +167,7 @@
     <Compile Include="Source\ObjectPooling\ObjectPoolManager.cs" />
     <Compile Include="Source\ObjectPooling\PooledObject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+>>>>>>> Вроде конечная построек
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
