@@ -127,12 +127,21 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             try
             {
                 // 1. Сброс физики
-                var rb = instance.GetComponent<Rigidbody>();
-                if (rb != null)
+                var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
+                foreach (var rb in rigidbodies)
                 {
-                    rb.velocity = Vector3.zero;
-                    rb.angularVelocity = Vector3.zero;
-                    rb.Sleep();
+                    if (rb != null)
+                    {
+                        if (Plugin.DebugLoggingEnabled.Value)
+                            Plugin.Log.LogInfo($"[ObjectPooling] Cleanup Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}, velocity: {rb.velocity}");
+
+                        if (!rb.isKinematic)
+                        {
+                            rb.velocity = Vector3.zero;
+                            rb.angularVelocity = Vector3.zero;
+                            rb.Sleep();
+                        }
+                    }
                 }
 
                 // 2. Очистка ItemDrop
@@ -182,10 +191,19 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             try
             {
                 // 1. Пробуждаем физику
-                var rb = instance.GetComponent<Rigidbody>();
-                if (rb != null)
+                var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
+                foreach (var rb in rigidbodies)
                 {
-                    rb.WakeUp();
+                    if (rb != null)
+                    {
+                        if (Plugin.DebugLoggingEnabled.Value)
+                            Plugin.Log.LogInfo($"[ObjectPooling] Reset Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}");
+
+                        if (!rb.isKinematic)
+                        {
+                            rb.WakeUp();
+                        }
+                    }
                 }
 
                 // 2. Включаем коллайдер

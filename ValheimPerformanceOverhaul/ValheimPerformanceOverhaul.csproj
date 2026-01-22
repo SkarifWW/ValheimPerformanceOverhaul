@@ -110,30 +110,37 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AnimatorOptimizer.cs" />
-    <Compile Include="Audio\AudioPatches.cs" />
-    <Compile Include="Audio\AudioPoolManager.cs" />
-    <Compile Include="DistanceCuller.cs" />
-    <Compile Include="DistanceCullerManager.cs" />
-    <Compile Include="GraphicsPatches.cs" />
-    <Compile Include="JitPatches.cs" />
-    <Compile Include="LightCulling\LightCullingPatches.cs" />
-    <Compile Include="LightCulling\LightLODPatches.cs" />
-    <Compile Include="LightCulling\LightLODSystem.cs" />
-    <Compile Include="LightCulling\LightManager.cs" />
-    <Compile Include="MinimapOptimizer.cs" />
-    <Compile Include="Network\NetworkManager.cs" />
-    <Compile Include="Network\NetworkPatches.cs" />
-    <Compile Include="ObjectPooling\ObjectPoolingPatches.cs" />
-    <Compile Include="ObjectPooling\ObjectPoolManager.cs" />
-    <Compile Include="ObjectPooling\PooledObject.cs" />
-    <Compile Include="ParticleSystemOptimizer.cs" />
-    <Compile Include="PieceOptimizer.cs" />
-    <Compile Include="Plugin.cs" />
-    <Compile Include="GCPatches.cs" />
+    <Compile Include="Source\Core\DebugPatches.cs" />
+    <Compile Include="Source\Core\GCPatches.cs" />
+    <Compile Include="Source\Core\JitPatches.cs" />
+    <Compile Include="Source\Core\Plugin.cs" />
+    <Compile Include="Source\Pieces\AsyncWearInit.cs" />
+    <Compile Include="Source\Pieces\DecorBatcher.cs" />
+    <Compile Include="Source\Pieces\DecorOptimizer.cs" />
+    <Compile Include="Source\Pieces\RainDamagePatch.cs" />
+    <Compile Include="Source\Pieces\DistanceCuller.cs" />
+    <Compile Include="Source\Pieces\DistanceCullerManager.cs" />
+    <Compile Include="Source\Pieces\PiecePatches.cs" />
+    <Compile Include="Source\Pieces\PieceSleepManager.cs" />
+    <Compile Include="Source\Pieces\SupportCache.cs" />
+    <Compile Include="Source\Network\NetworkManager.cs" />
+    <Compile Include="Source\Network\NetworkPatches.cs" />
+    <Compile Include="Source\Network\ZDOOptimizer.cs" />
+    <Compile Include="Source\Graphics\GraphicsPatches.cs" />
+    <Compile Include="Source\Graphics\LightCulling\LightCullingPatches.cs" />
+    <Compile Include="Source\Graphics\LightCulling\LightLODPatches.cs" />
+    <Compile Include="Source\Graphics\LightCulling\LightLODSystem.cs" />
+    <Compile Include="Source\Graphics\LightCulling\LightManager.cs" />
+    <Compile Include="Source\Audio\AudioPatches.cs" />
+    <Compile Include="Source\Audio\AudioPoolManager.cs" />
+    <Compile Include="Source\Optimizations\AnimatorOptimizer.cs" />
+    <Compile Include="Source\Optimizations\MinimapOptimizer.cs" />
+    <Compile Include="Source\Optimizations\ParticleSystemOptimizer.cs" />
+    <Compile Include="Source\Optimizations\VegetationOptimizer.cs" />
+    <Compile Include="Source\ObjectPooling\ObjectPoolingPatches.cs" />
+    <Compile Include="Source\ObjectPooling\ObjectPoolManager.cs" />
+    <Compile Include="Source\ObjectPooling\PooledObject.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="VegetationOptimizer.cs" />
-    <Compile Include="ZDOOptimizer.cs" />
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />

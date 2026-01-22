@@ -67,10 +67,7 @@ namespace ValheimPerformanceOverhaul
 
                 if (component == this ||
                     component is ZNetView ||
-                    component is ZSyncTransform ||
-                    component is Rigidbody ||
-                    component is Collider ||
-                    component is Animator)
+                    component is ZSyncTransform)
                 {
                     continue;
                 }
@@ -256,12 +253,20 @@ namespace ValheimPerformanceOverhaul
 
                     try
                     {
+                        if (Plugin.DebugLoggingEnabled.Value)
+                            Plugin.Log.LogInfo($"[DistanceCuller] Rigidbody {rb.gameObject.name} transition: enabled={enabled}, current isKinematic={rb.isKinematic}, target isKinematic={(enabled ? originalIsKinematic : true)}");
+
+                        if (!enabled && !rb.isKinematic)
+                        {
+                            rb.velocity = Vector3.zero;
+                            rb.angularVelocity = Vector3.zero;
+                        }
                         rb.isKinematic = enabled ? originalIsKinematic : true;
                     }
                     catch (System.Exception e)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic: {e.Message}");
+                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic on {rb.gameObject.name}: {e.Message}");
                     }
                 }
 
