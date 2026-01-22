@@ -97,6 +97,24 @@ namespace ValheimPerformanceOverhaul.Particles
             // Пропускаем UI партиклы
             if (ps.GetComponentInParent<Canvas>() != null) return;
 
+            // === ФИКС ===
+            // Пропускаем партиклы кораблей (ванильных) и ValheimVehicles
+            // Проверяем компоненты в родителях
+            var parentComponents = ps.GetComponentsInParent<MonoBehaviour>(true);
+            foreach (var comp in parentComponents)
+            {
+                if (comp == null) continue;
+                string typeName = comp.GetType().Name;
+
+                // ShipEffects - ванильный, VehicleShipEffects - из мода
+                if (typeName == "Ship" || typeName == "ShipEffects" ||
+                    typeName == "VehicleShipEffects" || typeName == "VehicleController")
+                {
+                    return; // Не трогаем этот партикл
+                }
+            }
+            // ============
+
             var tracked = ps.gameObject.AddComponent<TrackedParticle>();
             _allParticles.Add(tracked);
         }
