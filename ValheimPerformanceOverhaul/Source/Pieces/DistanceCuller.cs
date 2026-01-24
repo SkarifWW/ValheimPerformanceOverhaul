@@ -14,8 +14,8 @@ namespace ValheimPerformanceOverhaul
 
         private float _cullDistanceSqr;
         private float _wakeUpDistanceSqr;
-        private const float HYSTERESIS = 10f;
-        private const float CHECK_INTERVAL = 1.0f;
+        private const float HYSTERESIS = 15f; // ✅ Увеличено с 10f для плавности
+        private const float CHECK_INTERVAL = 2.0f; // ✅ Увеличено с 1.0f
         private float _checkTimer;
 
         private float _aiUpdateTimer = 0f;
@@ -23,7 +23,6 @@ namespace ValheimPerformanceOverhaul
 
         private Transform _transform;
 
-        // ✅ НОВОЕ: Кэшируем состояние Rigidbody
         private struct RigidbodyState
         {
             public bool WasKinematic;
@@ -32,7 +31,6 @@ namespace ValheimPerformanceOverhaul
             public Vector3 LastAngularVelocity;
         }
 
-        // ✅ НОВОЕ: Reusable список для очистки
         private readonly List<Rigidbody> _deadRigidbodies = new List<Rigidbody>(8);
 
         private void Awake()
@@ -58,6 +56,7 @@ namespace ValheimPerformanceOverhaul
                     CollectRigidbodies();
                 }
 
+                // ✅ Рандомизируем таймер для распределения нагрузки
                 _checkTimer = Random.Range(0f, CHECK_INTERVAL);
             }
             catch (System.Exception e)
@@ -77,18 +76,16 @@ namespace ValheimPerformanceOverhaul
             {
                 if (component == null) continue;
 
-                // ✅ Расширенный список исключений
                 if (component == this ||
                     component is ZNetView ||
                     component is ZSyncTransform ||
                     component is Rigidbody ||
                     component is Collider ||
-                    component is DistanceCuller) // ✅ Исключаем себя
+                    component is DistanceCuller)
                 {
                     continue;
                 }
 
-                // ✅ BaseAI обрабатывается отдельно через AiThrottlingEnabled
                 if (Plugin.AiThrottlingEnabled.Value && component is BaseAI)
                 {
                     continue;
@@ -107,7 +104,6 @@ namespace ValheimPerformanceOverhaul
             {
                 if (rb != null && !_culledRigidbodies.ContainsKey(rb))
                 {
-                    // ✅ ИСПРАВЛЕНО: Сохраняем полное состояние
                     var state = new RigidbodyState
                     {
                         WasKinematic = rb.isKinematic,
@@ -229,12 +225,13 @@ namespace ValheimPerformanceOverhaul
 
             _isCulled = newStateIsCulled;
 
-            if (Plugin.DebugLoggingEnabled.Value)
+            // ✅ НЕ спамим логами каждый раз
+            if (Plugin.DebugLoggingEnabled.Value && Time.frameCount % 300 == 0)
             {
                 LogCullingStateChange(enabled);
             }
 
-            // ✅ ИСПРАВЛЕНО: Обратный цикл для безопасного удаления
+            // Компоненты
             for (int i = _culledComponents.Count - 1; i >= 0; i--)
             {
                 var component = _culledComponents[i];
@@ -259,10 +256,10 @@ namespace ValheimPerformanceOverhaul
                 }
             }
 
-            // ✅ ИСПРАВЛЕНО: Безопасная работа с Rigidbodies
+            // ✅ ИСПРАВЛЕНО: Rigidbody обработка
             if (Plugin.CullPhysicsEnabled.Value)
             {
-                _deadRigidbodies.Clear(); // ✅ Очищаем ПЕРЕД использованием
+                _deadRigidbodies.Clear();
 
                 foreach (var pair in _culledRigidbodies)
                 {
@@ -284,7 +281,7 @@ namespace ValheimPerformanceOverhaul
                             {
                                 rb.isKinematic = false;
 
-                                // ✅ Восстанавливаем velocity только для non-kinematic
+                                // ✅ КРИТИЧНО: Устанавливаем velocity ТОЛЬКО на non-kinematic
                                 if (!rb.isKinematic && !originalState.WasSleeping)
                                 {
                                     rb.linearVelocity = originalState.LastVelocity;
@@ -294,9 +291,10 @@ namespace ValheimPerformanceOverhaul
                         }
                         else
                         {
-                            // ✅ Сохраняем текущее состояние перед отключением
+                            // ✅ КРИТИЧНО: Обнуляем velocity ПЕРЕД установкой kinematic
                             if (!rb.isKinematic)
                             {
+                                // Сохраняем текущее состояние
                                 var newState = new RigidbodyState
                                 {
                                     WasKinematic = originalState.WasKinematic,
@@ -306,19 +304,19 @@ namespace ValheimPerformanceOverhaul
                                 };
                                 _culledRigidbodies[rb] = newState;
 
-                                // ✅ КРИТИЧНО: Обнуляем velocity ТОЛЬКО для non-kinematic
+                                // ✅ Обнуляем velocity ПЕРЕД kinematic
                                 rb.linearVelocity = Vector3.zero;
                                 rb.angularVelocity = Vector3.zero;
                                 rb.Sleep();
+
+                                // ✅ ТЕПЕРЬ делаем kinematic
+                                rb.isKinematic = true;
                             }
-
-                            // Делаем kinematic для экономии CPU
-                            rb.isKinematic = true;
-                        }
-
-                        if (Plugin.DebugLoggingEnabled.Value)
-                        {
-                            Plugin.Log.LogInfo($"[DistanceCuller] Rigidbody {rb.gameObject.name}: enabled={enabled}, isKinematic={rb.isKinematic}");
+                            else if (!originalState.WasKinematic)
+                            {
+                                // Объект стал kinematic до нас - делаем kinematic
+                                rb.isKinematic = true;
+                            }
                         }
                     }
                     catch (System.Exception e)
@@ -328,16 +326,13 @@ namespace ValheimPerformanceOverhaul
                     }
                 }
 
-                // ✅ Очистка мертвых ссылок
+                // Очистка мертвых ссылок
                 if (_deadRigidbodies.Count > 0)
                 {
                     foreach (var rb in _deadRigidbodies)
                     {
                         _culledRigidbodies.Remove(rb);
                     }
-
-                    if (Plugin.DebugLoggingEnabled.Value)
-                        Plugin.Log.LogInfo($"[DistanceCuller] Cleaned {_deadRigidbodies.Count} dead Rigidbody references");
                 }
             }
         }

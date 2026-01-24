@@ -12,7 +12,6 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (!Plugin.PieceOptimizationEnabled.Value) return;
 
-            // Functionality 2: Decor Collider Optimization
             if (__instance.m_category == Piece.PieceCategory.Misc)
             {
                 OptimizeDecor(__instance);
@@ -24,7 +23,7 @@ namespace ValheimPerformanceOverhaul.Pieces
             if (piece == null) return;
 
             // SAFETY: Do not optimize if it has components that imply dynamic behavior
-            if (piece.GetComponent<ZSyncTransform>() != null || 
+            if (piece.GetComponent<ZSyncTransform>() != null ||
                 piece.GetComponent<Character>() != null ||
                 piece.GetComponent<BaseAI>() != null)
             {
@@ -42,23 +41,41 @@ namespace ValheimPerformanceOverhaul.Pieces
                 return;
             }
 
-            // We KEEP colliders enabled so things stay interactable (Hover, Strike, etc.)
-            // But we simplify physics by making Rigidbodies kinematic below.
+            GameObject go = piece.gameObject;
+            if (go == null) return;
 
-            var rigidbodies = piece.GetComponentsInChildren<Rigidbody>(true);
-            foreach (var rb in rigidbodies)
+            try
             {
-                if (rb != null)
+                // ? ИСПРАВЛЕНО: Безопасная работа с Rigidbody
+                var rigidbodies = go.GetComponentsInChildren<Rigidbody>(true);
+                foreach (var rb in rigidbodies)
                 {
-                    if (Plugin.DebugLoggingEnabled.Value)
-                        Plugin.Log.LogInfo($"[DecorOptimizer] Optimizing Rigidbody on {piece.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}");
-
-                    if (!rb.isKinematic)
+                    if (rb != null)
                     {
-                        rb.linearVelocity = Vector3.zero;
-                        rb.angularVelocity = Vector3.zero;
+                        // ? КРИТИЧНО: Обнуляем velocity ТОЛЬКО если НЕ kinematic
+                        if (!rb.isKinematic)
+                        {
+                            rb.linearVelocity = Vector3.zero;
+                            rb.angularVelocity = Vector3.zero;
+                            rb.Sleep();
+                        }
+
+                        // ? Делаем kinematic ПОСЛЕ обнуления velocity
+                        rb.isKinematic = true;
+
+                        if (Plugin.DebugLoggingEnabled.Value)
+                            Plugin.Log.LogInfo($"[DecorOptimizer] Made Rigidbody kinematic on {piece.name} (child: {rb.gameObject.name})");
                     }
-                    rb.isKinematic = true;
+                }
+
+                // ? Коллайдеры остаются активными для интерактивности
+                // (DistanceCuller отключит их на расстоянии если нужно)
+            }
+            catch (System.Exception e)
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                {
+                    Plugin.Log.LogError($"[DecorOptimizer] Error on {go.name}: {e.Message}");
                 }
             }
         }
