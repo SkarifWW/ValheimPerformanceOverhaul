@@ -2,12 +2,13 @@
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using System.Buffers;
 using System.Reflection;
 using UnityEngine;
-using ValheimPerformanceOverhaul.ObjectPooling;
-using ValheimPerformanceOverhaul.LightCulling;
-using ValheimPerformanceOverhaul.Audio;
 using ValheimPerformanceOverhaul.AI;
+using ValheimPerformanceOverhaul.Audio;
+using ValheimPerformanceOverhaul.LightCulling;
+using ValheimPerformanceOverhaul.ObjectPooling;
 
 namespace ValheimPerformanceOverhaul
 {
@@ -167,6 +168,10 @@ namespace ValheimPerformanceOverhaul
                 DontDestroyOnLoad(aiManager);
                 Log.LogInfo("[AI] Optimizer manager initialized.");
             }
+            var memoryManager = new GameObject("_VPO_MemoryManager");
+            memoryManager.AddComponent<MemoryManager>();
+            DontDestroyOnLoad(memoryManager);
+            Log.LogInfo("[MemoryManager] Initialized.");
         }
 
         private void SetupConfig()
@@ -630,6 +635,99 @@ namespace ValheimPerformanceOverhaul
         {
             Log.LogInfo($"Unpatching all {PluginName} methods.");
             _harmony?.UnpatchSelf();
+        }
+    }
+
+    public class MemoryManager : MonoBehaviour
+    {
+        public static MemoryManager Instance { get; private set; }
+
+        private float _cleanupTimer = 0f;
+        private const float CLEANUP_INTERVAL = 60f;
+
+        private float _forceGCTimer = 0f;
+        private const float FORCE_GC_INTERVAL = 300f;
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            Plugin.Log.LogInfo("[MemoryManager] Initialized");
+        }
+
+        private void Update()
+        {
+            _cleanupTimer += Time.deltaTime;
+            _forceGCTimer += Time.deltaTime;
+
+            if (_cleanupTimer >= CLEANUP_INTERVAL)
+            {
+                _cleanupTimer = 0f;
+                PerformLightCleanup();
+            }
+
+            if (_forceGCTimer >= FORCE_GC_INTERVAL)
+            {
+                _forceGCTimer = 0f;
+
+                if (ShouldPerformHeavyCleanup())
+                {
+                    PerformHeavyCleanup();
+                }
+            }
+        }
+
+        private bool ShouldPerformHeavyCleanup()
+        {
+            if (Player.m_localPlayer == null) return true;
+
+            var player = Player.m_localPlayer;
+            if (player.IsAttached() || player.IsSleeping() || player.InPlaceMode())
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private void PerformLightCleanup()
+        {
+            int beforeMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
+
+            Resources.UnloadUnusedAssets();
+
+            int afterMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
+
+            if (Plugin.DebugLoggingEnabled.Value)
+            {
+                Plugin.Log.LogInfo($"[MemoryManager] Light cleanup: {beforeMB}MB -> {afterMB}MB");
+            }
+        }
+
+        private void PerformHeavyCleanup()
+        {
+            int beforeMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
+
+            Resources.UnloadUnusedAssets();
+            System.GC.Collect(System.GC.MaxGeneration, System.GCCollectionMode.Forced);
+            System.GC.WaitForPendingFinalizers();
+            System.GC.Collect();
+
+            int afterMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
+
+            Plugin.Log.LogInfo($"[MemoryManager] Heavy cleanup: {beforeMB}MB -> {afterMB}MB");
+        }
+
+        private void OnDestroy()
+        {
+            Instance = null;
         }
     }
 }

@@ -40,6 +40,9 @@ namespace ValheimPerformanceOverhaul
         [HarmonyPrefix]
         private static bool Minimap_Update_Prefix(Minimap __instance)
         {
+            // ✅ КРИТИЧНО: Проверяем конфиг
+            if (!Plugin.MinimapOptimizationEnabled.Value) return true;
+            
             // Если поля не найдены или оптимизация выключена в конфиге — выполняем оригинальный код
             if (!_fieldsFound) return true;
 
@@ -76,6 +79,9 @@ namespace ValheimPerformanceOverhaul
         [HarmonyPrefix]
         private static bool UpdateDynamicPins_Prefix(Minimap __instance)
         {
+            // ✅ КРИТИЧНО: Проверяем конфиг
+            if (!Plugin.MinimapOptimizationEnabled.Value) return true;
+            
             // Если карта закрыта и миникарта выключена, не обновляем пины
             if (__instance.m_mode == Minimap.MapMode.None) return false;
 

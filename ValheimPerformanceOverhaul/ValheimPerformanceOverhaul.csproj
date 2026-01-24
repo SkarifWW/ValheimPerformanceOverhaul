@@ -117,6 +117,7 @@
     <Compile Include="Source\Pieces\AsyncWearInit.cs" />
     <Compile Include="Source\Pieces\DecorBatcher.cs" />
     <Compile Include="Source\Pieces\DecorOptimizer.cs" />
+    <Compile Include="Source\Pieces\DistanceCullerPatches.cs" />
     <Compile Include="Source\Pieces\RainDamagePatch.cs" />
     <Compile Include="Source\Pieces\DistanceCuller.cs" />
     <Compile Include="Source\Pieces\DistanceCullerManager.cs" />

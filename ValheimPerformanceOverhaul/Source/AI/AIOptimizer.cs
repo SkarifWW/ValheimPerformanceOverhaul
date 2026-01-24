@@ -26,6 +26,11 @@ namespace ValheimPerformanceOverhaul.AI
 
         private readonly Dictionary<int, (bool visible, float time)> _losCache = new Dictionary<int, (bool, float)>();
 
+        // ✅ КРИТИЧНО: Лимиты для предотвращения утечки памяти
+        private const int MAX_LOS_CACHE_SIZE = 100;
+        private const float LOS_CACHE_TIMEOUT = 5f;
+        private float _losCleanupTimer = 0f;
+
         // === МОДУЛЬ 5: Physics Sleep ===
         private Rigidbody _rigidbody;
         private Collider[] _colliders;
@@ -66,6 +71,14 @@ namespace ValheimPerformanceOverhaul.AI
 
             UpdateClosestPlayerDistance();
             UpdatePhysicsAndAnimator();
+
+            // ✅ КРИТИЧНО: Очистка LOS кэша для предотвращения утечки памяти
+            _losCleanupTimer += DIST_CHECK_INTERVAL;
+            if (_losCleanupTimer >= 10f) // Каждые 10 секунд
+            {
+                _losCleanupTimer = 0f;
+                CleanupLOSCache();
+            }
         }
 
         private void UpdateClosestPlayerDistance()
@@ -245,6 +258,47 @@ namespace ValheimPerformanceOverhaul.AI
             
             float t = (_closestPlayerDistSqr - 1600f) / (14400f - 1600f);
             return Mathf.Lerp(min, max, t);
+        }
+
+        // ✅ КРИТИЧНО: Очистка LOS кэша для предотвращения утечки памяти
+        private void CleanupLOSCache()
+        {
+            if (_losCache.Count == 0) return;
+
+            float currentTime = Time.time;
+            var keysToRemove = new List<int>();
+
+            // Удаляем устаревшие записи (> 5 секунд)
+            foreach (var kvp in _losCache)
+            {
+                if (currentTime - kvp.Value.time > LOS_CACHE_TIMEOUT)
+                {
+                    keysToRemove.Add(kvp.Key);
+                }
+            }
+
+            foreach (var key in keysToRemove)
+            {
+                _losCache.Remove(key);
+            }
+
+            // Жесткий лимит - если кэш превышен, очищаем полностью
+            if (_losCache.Count > MAX_LOS_CACHE_SIZE)
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogWarning($"[AIOptimizer] LOS cache exceeded limit ({_losCache.Count}), clearing");
+                _losCache.Clear();
+            }
+            else if (keysToRemove.Count > 0 && Plugin.DebugLoggingEnabled.Value)
+            {
+                Plugin.Log.LogInfo($"[AIOptimizer] Cleaned {keysToRemove.Count} stale LOS cache entries");
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // ✅ КРИТИЧНО: Очищаем словари при уничтожении
+            _losCache.Clear();
         }
     }
 }

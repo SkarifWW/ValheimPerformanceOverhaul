@@ -145,9 +145,10 @@ namespace ValheimPerformanceOverhaul.LightCulling
             public LightPriority Priority;
         }
 
-        // ✅ ИСПРАВЛЕНО: Жесткий лимит на размер массива
-        private const int MAX_LIGHT_INFOS = 4096;
-        private LightInfo[] _lightInfos = new LightInfo[512];
+        // ✅ КРИТИЧНО: Жесткий лимит на размер массива + защита от роста
+        private const int MAX_LIGHT_INFOS = 1024; // Уменьшено с 2048 для предотвращения утечек
+        private const int MAX_TRACKED_LIGHTS = 512; // НОВОЕ: жесткий лимит на _allLights
+        private LightInfo[] _lightInfos = new LightInfo[256]; // Уменьшен начальный размер
         private int _lightInfoCount = 0;
 
         private float _updateTimer;
@@ -210,11 +211,11 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (light.type == LightType.Directional || light.intensity <= 0.1f)
                 return;
 
-            // ✅ ИСПРАВЛЕНО: Проверяем лимит ПЕРЕД добавлением
-            if (_allLights.Count >= MAX_LIGHT_INFOS)
+            // ✅ ИСПРАВЛЕНО: Проверяем СТРОГИЙ лимит ПЕРЕД добавлением
+            if (_allLights.Count >= MAX_TRACKED_LIGHTS)
             {
                 if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogWarning($"[LightCulling] Max lights reached ({MAX_LIGHT_INFOS}), ignoring: {light.name}");
+                    Plugin.Log.LogWarning($"[LightCulling] Max tracked lights reached ({MAX_TRACKED_LIGHTS}), ignoring: {light.name}");
                 return;
             }
 
@@ -249,6 +250,13 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void Update()
         {
+            // ✅ КРИТИЧНО: Проверяем конфиг в начале
+            if (!Plugin.LightCullingEnabled.Value)
+            {
+                enabled = false;
+                return;
+            }
+
             if (Camera.main == null || Player.m_localPlayer == null) return;
 
             _updateTimer += Time.deltaTime;
