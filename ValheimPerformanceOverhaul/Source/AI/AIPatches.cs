@@ -113,9 +113,19 @@ namespace ValheimPerformanceOverhaul.AI
             if (!Plugin.AiThrottlingEnabled.Value) return true;
 
             var optimizer = __instance.GetComponent<AIOptimizer>();
-            if (optimizer != null && !optimizer.ShouldCheckEnemy(out __result))
+            if (optimizer != null)
             {
-                return false; // Используем кешированного врага
+                // ✅ ИСПРАВЛЕНИЕ: БОЙ БЕЗ ЗАДЕРЖЕК
+                // Если моб в боевой зоне (< 60m), отключаем троттлинг сенсоров
+                if (optimizer.GetDistanceToPlayer() < AI_ACTIVATION_RADIUS)
+                {
+                    return true;
+                }
+
+                if (!optimizer.ShouldCheckEnemy(out __result))
+                {
+                    return false; // Используем кешированного врага
+                }
             }
             return true;
         }
@@ -143,6 +153,12 @@ namespace ValheimPerformanceOverhaul.AI
             var optimizer = __instance.GetComponent<AIOptimizer>();
             if (optimizer != null)
             {
+                 // ✅ ИСПРАВЛЕНИЕ: БОЙ БЕЗ ЗАДЕРЖЕК
+                if (optimizer.GetDistanceToPlayer() < AI_ACTIVATION_RADIUS)
+                {
+                    return true;
+                }
+
                 // Проверяем кеш
                 if (optimizer.GetCachedLOS(target, out bool cachedVisible))
                 {
@@ -152,7 +168,7 @@ namespace ValheimPerformanceOverhaul.AI
 
                 // ✅ ОПТИМИЗАЦИЯ: Если игрок очень далеко, LOS всегда false без raycast
                 float distToPlayer = optimizer.GetDistanceToPlayer();
-                if (distToPlayer > 40f)
+                if (distToPlayer > 40f) // Эта логика дублируется с верхним IF, но оставим для надежности дальних проверок
                 {
                     __result = false;
                     optimizer.SetCachedLOS(target, false);
@@ -185,6 +201,10 @@ namespace ValheimPerformanceOverhaul.AI
             var optimizer = __instance.GetComponent<AIOptimizer>();
             if (optimizer != null)
             {
+                if (optimizer.GetDistanceToPlayer() < AI_ACTIVATION_RADIUS)
+                {
+                    return true;
+                }
                 return optimizer.ShouldCheckAttack();
             }
             return true;

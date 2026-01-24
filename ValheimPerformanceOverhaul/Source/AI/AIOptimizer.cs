@@ -183,25 +183,21 @@ namespace ValheimPerformanceOverhaul.AI
 
         private void SetPhysicsActive(bool active)
         {
-            // ✅ ИСПРАВЛЕНИЕ #2: Не трогаем isKinematic для Characters
-            // Unity спамит "Setting linear velocity of a kinematic body is not supported",
-            // потому что Character контроллер пытается двигать тело, а мы делали его kinematic.
-            bool isCharacter = _character != null;
+            // ✅ ИСПРАВЛЕНИЕ #3: ПОЛНОСТЬЮ игнорируем Characters для физики
+            // Если выключить коллайдеры но оставить гравитацию (так как Kinematic нельзя), они падают под землю.
+            if (_character != null) return;
 
             if (_rigidbody != null)
             {
-                if (!isCharacter) // ТОЛЬКО для предметов/обломков
-                {
-                    if (!active)
-                    {
-                        if (!_rigidbody.isKinematic)
-                        {
-                            _rigidbody.velocity = Vector3.zero;
-                            _rigidbody.angularVelocity = Vector3.zero;
-                        }
-                    }
-                    _rigidbody.isKinematic = !active;
-                }
+                 if (!active)
+                 {
+                     if (!_rigidbody.isKinematic)
+                     {
+                         _rigidbody.velocity = Vector3.zero;
+                         _rigidbody.angularVelocity = Vector3.zero;
+                     }
+                 }
+                 _rigidbody.isKinematic = !active;
             }
 
             if (_colliders != null)
@@ -214,7 +210,7 @@ namespace ValheimPerformanceOverhaul.AI
                     }
                 }
             }
-
+            
             _physicsActive = active;
         }
 
