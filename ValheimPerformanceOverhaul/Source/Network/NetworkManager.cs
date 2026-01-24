@@ -57,9 +57,13 @@ namespace ValheimPerformanceOverhaul.Network
         private static byte[] _dictBytes;
         private static bool _isInitialized = false;
 
-        // ✅ НОВОЕ: Настройки сжатия
-        private static int _compressionThreshold = 128; // Минимальный размер для сжатия
-        private static float _minCompressionRatio = 0.95f; // Минимальная эффективность сжатия
+        // ✅ НОВОЕ: Header bytes для идентификации формата
+        private const byte HEADER_UNCOMPRESSED = 0x00;
+        private const byte HEADER_COMPRESSED = 0x01;
+        private const byte HEADER_LEGACY = 0xFF; // Для обратной совместимости
+
+        private static int _compressionThreshold = 128;
+        private static float _minCompressionRatio = 0.95f;
 
         public static void Initialize()
         {
@@ -90,9 +94,7 @@ namespace ValheimPerformanceOverhaul.Network
                     }
                 }
 
-                // Загружаем настройки из конфига
                 _compressionThreshold = Plugin.NetworkCompressionThreshold?.Value ?? 128;
-
                 _isInitialized = true;
             }
             catch (System.Exception e)
@@ -109,9 +111,15 @@ namespace ValheimPerformanceOverhaul.Network
             // ✅ ИСПРАВЛЕНО: Проверяем размер перед сжатием
             if (data.Length < _compressionThreshold)
             {
+                // ✅ КРИТИЧНО: Добавляем header для маленьких пакетов
+                var uncompressed = new byte[data.Length + 1];
+                uncompressed[0] = HEADER_UNCOMPRESSED;
+                Buffer.BlockCopy(data, 0, uncompressed, 1, data.Length);
+
                 if (Plugin.DebugLoggingEnabled.Value)
                     Plugin.Log.LogInfo($"[Network] Skipping compression for small packet ({data.Length} bytes)");
-                return data;
+
+                return uncompressed;
             }
 
             try
@@ -119,51 +127,128 @@ namespace ValheimPerformanceOverhaul.Network
                 byte[] compressed = _compressor.Wrap(new ReadOnlySpan<byte>(data)).ToArray();
 
                 // ✅ ИСПРАВЛЕНО: Проверяем эффективность сжатия
-                float compressionRatio = (float)compressed.Length / data.Length;
+                float compressionRatio = (float)(compressed.Length + 1) / data.Length; // +1 для header
 
                 if (compressionRatio >= _minCompressionRatio)
                 {
+                    // ✅ Сжатие неэффективно - возвращаем несжатое с header
+                    var uncompressed = new byte[data.Length + 1];
+                    uncompressed[0] = HEADER_UNCOMPRESSED;
+                    Buffer.BlockCopy(data, 0, uncompressed, 1, data.Length);
+
                     if (Plugin.DebugLoggingEnabled.Value)
                         Plugin.Log.LogInfo($"[Network] Compression ineffective ({compressionRatio:F2}), using original data");
-                    return data;
+
+                    return uncompressed;
                 }
 
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[Network] Compressed {data.Length} → {compressed.Length} bytes (ratio: {compressionRatio:F2})");
+                // ✅ КРИТИЧНО: Добавляем header к сжатым данным
+                var result = new byte[compressed.Length + 1];
+                result[0] = HEADER_COMPRESSED;
+                Buffer.BlockCopy(compressed, 0, result, 1, compressed.Length);
 
-                return compressed;
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[Network] Compressed {data.Length} → {result.Length} bytes (ratio: {compressionRatio:F2})");
+
+                return result;
             }
             catch (System.Exception e)
             {
                 Plugin.Log.LogError($"[Network] Compression failed: {e.Message}");
-                return data;
+
+                // ✅ В случае ошибки возвращаем с UNCOMPRESSED header
+                var fallback = new byte[data.Length + 1];
+                fallback[0] = HEADER_UNCOMPRESSED;
+                Buffer.BlockCopy(data, 0, fallback, 1, data.Length);
+                return fallback;
             }
         }
 
         public static byte[] Decompress(byte[] data)
         {
-            if (!_isInitialized || _decompressor == null || data == null || data.Length < 4)
+            if (!_isInitialized || _decompressor == null || data == null || data.Length < 1)
                 return data;
-
-            // Проверяем магическое число Zstd
-            uint magic = (uint)((data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0]);
-            if (magic != 0xFD2FB528)
-                return data; // Не сжатые данные
 
             try
             {
-                byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(data)).ToArray();
+                byte header = data[0];
 
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[Network] Decompressed {data.Length} → {decompressed.Length} bytes");
+                // ✅ ИСПРАВЛЕНО: Проверяем header
+                if (header == HEADER_UNCOMPRESSED)
+                {
+                    // Несжатые данные - извлекаем без header
+                    var result = new byte[data.Length - 1];
+                    Buffer.BlockCopy(data, 1, result, 0, result.Length);
 
-                return decompressed;
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Network] Uncompressed packet received: {result.Length} bytes");
+
+                    return result;
+                }
+                else if (header == HEADER_COMPRESSED)
+                {
+                    // Сжатые данные - декомпрессируем без header
+                    var compressed = new byte[data.Length - 1];
+                    Buffer.BlockCopy(data, 1, compressed, 0, compressed.Length);
+
+                    byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(compressed)).ToArray();
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[Network] Decompressed {data.Length} → {decompressed.Length} bytes");
+
+                    return decompressed;
+                }
+                else
+                {
+                    // ✅ НОВОЕ: Legacy формат без header (для обратной совместимости)
+                    // Проверяем магическое число Zstd
+                    if (data.Length >= 4)
+                    {
+                        uint magic = (uint)((data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0]);
+
+                        if (magic == 0xFD2FB528) // Zstd magic number
+                        {
+                            byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(data)).ToArray();
+
+                            if (Plugin.DebugLoggingEnabled.Value)
+                                Plugin.Log.LogInfo($"[Network] Legacy compressed packet: {data.Length} → {decompressed.Length} bytes");
+
+                            return decompressed;
+                        }
+                    }
+
+                    // Неизвестный формат - возвращаем как есть
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogWarning($"[Network] Unknown packet format, header: 0x{header:X2}");
+
+                    return data;
+                }
             }
             catch (System.Exception e)
             {
                 Plugin.Log.LogError($"[Network] Decompression failed: {e.Message}");
-                return data;
+                return data; // Возвращаем оригинал в случае ошибки
             }
+        }
+
+        // ✅ НОВОЕ: Статистика компрессии
+        private static long _totalBytesIn = 0;
+        private static long _totalBytesOut = 0;
+        private static long _totalPackets = 0;
+
+        public static void LogCompressionStats()
+        {
+            if (!Plugin.DebugLoggingEnabled.Value || _totalPackets == 0) return;
+
+            float ratio = (float)_totalBytesOut / _totalBytesIn;
+            Plugin.Log.LogInfo($"[Network] Compression Stats: {_totalPackets} packets, {_totalBytesIn} → {_totalBytesOut} bytes (ratio: {ratio:F2})");
+        }
+
+        public static void ResetStats()
+        {
+            _totalBytesIn = 0;
+            _totalBytesOut = 0;
+            _totalPackets = 0;
         }
     }
 }

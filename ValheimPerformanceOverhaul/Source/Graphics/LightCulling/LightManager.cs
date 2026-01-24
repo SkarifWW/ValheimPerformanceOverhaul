@@ -145,12 +145,14 @@ namespace ValheimPerformanceOverhaul.LightCulling
             public LightPriority Priority;
         }
 
+        // ✅ ИСПРАВЛЕНО: Жесткий лимит на размер массива
+        private const int MAX_LIGHT_INFOS = 4096;
         private LightInfo[] _lightInfos = new LightInfo[512];
         private int _lightInfoCount = 0;
 
         private float _updateTimer;
         private float _scanTimer;
-        private int _cleanupCounter = 0; // ✅ НОВОЕ
+        private int _cleanupCounter = 0;
 
         private const float UPDATE_INTERVAL = 0.25f;
         private const float SCAN_INTERVAL = 5f;
@@ -194,7 +196,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void PerformLightScan()
         {
-            Light[] existingLights = FindObjectsOfType<Light>(true);
+            Light[] existingLights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var light in existingLights)
             {
                 TryRegisterLight(light);
@@ -208,12 +210,25 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (light.type == LightType.Directional || light.intensity <= 0.1f)
                 return;
 
+            // ✅ ИСПРАВЛЕНО: Проверяем лимит ПЕРЕД добавлением
+            if (_allLights.Count >= MAX_LIGHT_INFOS)
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogWarning($"[LightCulling] Max lights reached ({MAX_LIGHT_INFOS}), ignoring: {light.name}");
+                return;
+            }
+
             var tracked = light.gameObject.AddComponent<TrackedLight>();
             _allLights.Add(tracked);
 
-            if (_allLights.Count > _lightInfos.Length)
+            // ✅ ИСПРАВЛЕНО: Контролируемое увеличение массива
+            if (_allLights.Count > _lightInfos.Length && _lightInfos.Length < MAX_LIGHT_INFOS)
             {
-                System.Array.Resize(ref _lightInfos, _lightInfos.Length * 2);
+                int newSize = Mathf.Min(_lightInfos.Length * 2, MAX_LIGHT_INFOS);
+                System.Array.Resize(ref _lightInfos, newSize);
+
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[LightCulling] Resized light array to {newSize}");
             }
 
             if (Plugin.DebugLoggingEnabled.Value)
@@ -248,7 +263,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
             if (_updateTimer < UPDATE_INTERVAL) return;
             _updateTimer = 0f;
 
-            // ✅ НОВОЕ: Ленивая очистка (каждые 10 обновлений)
+            // ✅ Ленивая очистка (каждые 10 обновлений)
             _cleanupCounter++;
             if (_cleanupCounter >= 10)
             {
@@ -259,15 +274,31 @@ namespace ValheimPerformanceOverhaul.LightCulling
             UpdateLightCulling();
         }
 
-        // ✅ НОВОЕ: Оптимизированная очистка
         private void CleanupNullLights()
         {
+            int removed = 0;
             for (int i = _allLights.Count - 1; i >= 0; i--)
             {
                 if (_allLights[i] == null || _allLights[i].LightSource == null)
                 {
                     _allLights.RemoveAt(i);
+                    removed++;
                 }
+            }
+
+            // ✅ НОВОЕ: Уменьшаем массив если он слишком большой
+            if (_allLights.Count < _lightInfos.Length / 4 && _lightInfos.Length > 512)
+            {
+                int newSize = Mathf.Max(512, _allLights.Count * 2);
+                System.Array.Resize(ref _lightInfos, newSize);
+
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[LightCulling] Downsized light array to {newSize}");
+            }
+
+            if (Plugin.DebugLoggingEnabled.Value && removed > 0)
+            {
+                Plugin.Log.LogInfo($"[LightCulling] Cleaned {removed} null lights, array size: {_lightInfos.Length}");
             }
         }
 
@@ -309,14 +340,12 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
             }
 
-            // ✅ ИСПРАВЛЕНО: Используем partial sort (QuickSelect)
-            // Вместо полной сортировки O(n log n) используем частичную O(n)
+            // ✅ Частичная сортировка O(n)
             QuickSelectTopN(_lightInfos, _lightInfoCount, _maxActiveLights);
 
             int activeLightCount = 0;
             int shadowCasterCount = 0;
 
-            // Обрабатываем только топ-N источников
             int processCount = System.Math.Min(_lightInfoCount, _maxActiveLights * 2);
 
             for (int i = 0; i < processCount; i++)
@@ -358,16 +387,14 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
             if (Plugin.DebugLoggingEnabled.Value && Time.frameCount % 60 == 0)
             {
-                Plugin.Log.LogInfo($"[LightCulling] Active: {activeLightCount}/{_maxActiveLights}, Shadows: {shadowCasterCount}/{_maxShadowCasters}");
+                Plugin.Log.LogInfo($"[LightCulling] Active: {activeLightCount}/{_maxActiveLights}, Shadows: {shadowCasterCount}/{_maxShadowCasters}, Total: {_allLights.Count}, Array: {_lightInfos.Length}");
             }
         }
 
-        // ✅ НОВОЕ: QuickSelect алгоритм для частичной сортировки O(n)
         private void QuickSelectTopN(LightInfo[] array, int length, int topN)
         {
             if (length <= topN) return;
 
-            // Сортируем только первые topN элементов
             int left = 0;
             int right = length - 1;
             topN = System.Math.Min(topN, length);
@@ -384,7 +411,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
                     right = pivotIndex - 1;
             }
 
-            // Сортируем только первые topN элементов
             System.Array.Sort(array, 0, System.Math.Min(topN, length),
                 System.Collections.Generic.Comparer<LightInfo>.Create((a, b) =>
                 {

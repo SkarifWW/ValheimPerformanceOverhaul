@@ -6,7 +6,7 @@ namespace ValheimPerformanceOverhaul
     public class DistanceCuller : MonoBehaviour
     {
         private readonly List<MonoBehaviour> _culledComponents = new List<MonoBehaviour>();
-        private readonly Dictionary<Rigidbody, bool> _culledRigidbodies = new Dictionary<Rigidbody, bool>();
+        private readonly Dictionary<Rigidbody, RigidbodyState> _culledRigidbodies = new Dictionary<Rigidbody, RigidbodyState>();
 
         private ZNetView _zNetView;
         private bool _isCulled = false;
@@ -22,6 +22,18 @@ namespace ValheimPerformanceOverhaul
         private const float AI_THROTTLE_INTERVAL = 1.0f;
 
         private Transform _transform;
+
+        // ✅ НОВОЕ: Кэшируем состояние Rigidbody
+        private struct RigidbodyState
+        {
+            public bool WasKinematic;
+            public bool WasSleeping;
+            public Vector3 LastVelocity;
+            public Vector3 LastAngularVelocity;
+        }
+
+        // ✅ НОВОЕ: Reusable список для очистки
+        private readonly List<Rigidbody> _deadRigidbodies = new List<Rigidbody>(8);
 
         private void Awake()
         {
@@ -65,13 +77,18 @@ namespace ValheimPerformanceOverhaul
             {
                 if (component == null) continue;
 
+                // ✅ Расширенный список исключений
                 if (component == this ||
                     component is ZNetView ||
-                    component is ZSyncTransform)
+                    component is ZSyncTransform ||
+                    component is Rigidbody ||
+                    component is Collider ||
+                    component is DistanceCuller) // ✅ Исключаем себя
                 {
                     continue;
                 }
 
+                // ✅ BaseAI обрабатывается отдельно через AiThrottlingEnabled
                 if (Plugin.AiThrottlingEnabled.Value && component is BaseAI)
                 {
                     continue;
@@ -90,7 +107,16 @@ namespace ValheimPerformanceOverhaul
             {
                 if (rb != null && !_culledRigidbodies.ContainsKey(rb))
                 {
-                    _culledRigidbodies.Add(rb, rb.isKinematic);
+                    // ✅ ИСПРАВЛЕНО: Сохраняем полное состояние
+                    var state = new RigidbodyState
+                    {
+                        WasKinematic = rb.isKinematic,
+                        WasSleeping = rb.IsSleeping(),
+                        LastVelocity = rb.isKinematic ? Vector3.zero : rb.linearVelocity,
+                        LastAngularVelocity = rb.isKinematic ? Vector3.zero : rb.angularVelocity
+                    };
+
+                    _culledRigidbodies.Add(rb, state);
                 }
             }
         }
@@ -208,7 +234,7 @@ namespace ValheimPerformanceOverhaul
                 LogCullingStateChange(enabled);
             }
 
-            // ✅ ИСПРАВЛЕНО: Используем обратный цикл вместо RemoveAll
+            // ✅ ИСПРАВЛЕНО: Обратный цикл для безопасного удаления
             for (int i = _culledComponents.Count - 1; i >= 0; i--)
             {
                 var component = _culledComponents[i];
@@ -233,50 +259,85 @@ namespace ValheimPerformanceOverhaul
                 }
             }
 
+            // ✅ ИСПРАВЛЕНО: Безопасная работа с Rigidbodies
             if (Plugin.CullPhysicsEnabled.Value)
             {
-                // ✅ ИСПРАВЛЕНО: Используем список для удаления
-                List<Rigidbody> toRemove = null;
+                _deadRigidbodies.Clear(); // ✅ Очищаем ПЕРЕД использованием
 
                 foreach (var pair in _culledRigidbodies)
                 {
                     Rigidbody rb = pair.Key;
-                    bool originalIsKinematic = pair.Value;
+                    RigidbodyState originalState = pair.Value;
 
                     if (rb == null)
                     {
-                        if (toRemove == null)
-                            toRemove = new List<Rigidbody>();
-                        toRemove.Add(rb);
+                        _deadRigidbodies.Add(rb);
                         continue;
                     }
 
                     try
                     {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[DistanceCuller] Rigidbody {rb.gameObject.name} transition: enabled={enabled}, current isKinematic={rb.isKinematic}, target isKinematic={(enabled ? originalIsKinematic : true)}");
-
-                        if (!enabled && !rb.isKinematic)
+                        if (enabled)
                         {
-                            rb.linearVelocity = Vector3.zero;
-                            rb.angularVelocity = Vector3.zero;
+                            // ✅ Восстанавливаем оригинальное состояние
+                            if (!originalState.WasKinematic && rb.isKinematic)
+                            {
+                                rb.isKinematic = false;
+
+                                // ✅ Восстанавливаем velocity только для non-kinematic
+                                if (!rb.isKinematic && !originalState.WasSleeping)
+                                {
+                                    rb.linearVelocity = originalState.LastVelocity;
+                                    rb.angularVelocity = originalState.LastAngularVelocity;
+                                }
+                            }
                         }
-                        rb.isKinematic = enabled ? originalIsKinematic : true;
+                        else
+                        {
+                            // ✅ Сохраняем текущее состояние перед отключением
+                            if (!rb.isKinematic)
+                            {
+                                var newState = new RigidbodyState
+                                {
+                                    WasKinematic = originalState.WasKinematic,
+                                    WasSleeping = rb.IsSleeping(),
+                                    LastVelocity = rb.linearVelocity,
+                                    LastAngularVelocity = rb.angularVelocity
+                                };
+                                _culledRigidbodies[rb] = newState;
+
+                                // ✅ КРИТИЧНО: Обнуляем velocity ТОЛЬКО для non-kinematic
+                                rb.linearVelocity = Vector3.zero;
+                                rb.angularVelocity = Vector3.zero;
+                                rb.Sleep();
+                            }
+
+                            // Делаем kinematic для экономии CPU
+                            rb.isKinematic = true;
+                        }
+
+                        if (Plugin.DebugLoggingEnabled.Value)
+                        {
+                            Plugin.Log.LogInfo($"[DistanceCuller] Rigidbody {rb.gameObject.name}: enabled={enabled}, isKinematic={rb.isKinematic}");
+                        }
                     }
                     catch (System.Exception e)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set isKinematic on {rb.gameObject.name}: {e.Message}");
+                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set Rigidbody state on {rb.gameObject.name}: {e.Message}");
                     }
                 }
 
-                // Очистка мертвых ссылок
-                if (toRemove != null)
+                // ✅ Очистка мертвых ссылок
+                if (_deadRigidbodies.Count > 0)
                 {
-                    foreach (var rb in toRemove)
+                    foreach (var rb in _deadRigidbodies)
                     {
                         _culledRigidbodies.Remove(rb);
                     }
+
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[DistanceCuller] Cleaned {_deadRigidbodies.Count} dead Rigidbody references");
                 }
             }
         }
@@ -304,6 +365,7 @@ namespace ValheimPerformanceOverhaul
 
                 _culledComponents.Clear();
                 _culledRigidbodies.Clear();
+                _deadRigidbodies.Clear();
             }
             catch (System.Exception e)
             {

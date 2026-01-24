@@ -6,10 +6,13 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
     public static class ObjectPoolManager
     {
         private static readonly Dictionary<int, Queue<GameObject>> _pools = new Dictionary<int, Queue<GameObject>>();
-        private static readonly HashSet<GameObject> _objectsInUse = new HashSet<GameObject>(); // ✅ НОВОЕ: Трекинг активных объектов
+        private static readonly HashSet<GameObject> _objectsInUse = new HashSet<GameObject>();
         private static Transform _poolParent;
         private const int MAX_POOL_SIZE = 100;
-        private static readonly object _lockObject = new object(); // ✅ НОВОЕ: Thread safety
+        private static readonly object _lockObject = new object();
+
+        // ✅ НОВОЕ: Reusable lists для уменьшения GC
+        private static readonly List<GameObject> _tempActiveCheck = new List<GameObject>(16);
 
         public static void Initialize()
         {
@@ -33,31 +36,59 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             int prefabHash = prefabName.GetStableHashCode();
             instance = null;
 
-            lock (_lockObject) // ✅ НОВОЕ: Thread safety
+            lock (_lockObject)
             {
                 if (_pools.TryGetValue(prefabHash, out Queue<GameObject> pool) && pool.Count > 0)
                 {
-                    instance = pool.Dequeue();
-
-                    // ✅ НОВОЕ: Проверка на null и повторное использование
-                    if (instance == null)
+                    // ✅ ИСПРАВЛЕНО: Безопасное извлечение с проверкой состояния
+                    int attempts = 0;
+                    while (pool.Count > 0 && attempts < 5)
                     {
-                        return TryGetObject(prefabName, out instance);
+                        instance = pool.Dequeue();
+                        attempts++;
+
+                        if (instance == null)
+                        {
+                            Plugin.Log.LogWarning($"[ObjectPooling] Null object in pool for {prefabName}");
+                            continue;
+                        }
+
+                        // ✅ КРИТИЧНО: Проверяем, не активен ли объект
+                        if (instance.activeSelf)
+                        {
+                            Plugin.Log.LogError($"[ObjectPooling] Object already active: {prefabName}");
+                            _objectsInUse.Remove(instance); // Очищаем некорректное состояние
+                            continue;
+                        }
+
+                        // ✅ КРИТИЧНО: Проверяем ZNetView
+                        var netView = instance.GetComponent<ZNetView>();
+                        if (netView != null)
+                        {
+                            var existingZDO = netView.GetZDO();
+                            if (existingZDO != null && existingZDO.IsValid())
+                            {
+                                Plugin.Log.LogError($"[ObjectPooling] Object has valid ZDO: {prefabName}");
+                                continue;
+                            }
+                        }
+
+                        // ✅ КРИТИЧНО: Проверяем, не используется ли уже объект
+                        if (_objectsInUse.Contains(instance))
+                        {
+                            Plugin.Log.LogError($"[ObjectPooling] Object already in use: {prefabName}");
+                            continue;
+                        }
+
+                        // Объект прошел все проверки - используем его
+                        _objectsInUse.Add(instance);
+                        ResetObjectState(instance);
+                        return true;
                     }
 
-                    // ✅ КРИТИЧНО: Проверяем, не используется ли уже объект
-                    if (_objectsInUse.Contains(instance))
-                    {
-                        Plugin.Log.LogError($"[ObjectPooling] CRITICAL: Object already in use! {prefabName}");
-                        return TryGetObject(prefabName, out instance); // Берем следующий
-                    }
-
-                    // Отмечаем как используемый
-                    _objectsInUse.Add(instance);
-
-                    // Сброс состояния
-                    ResetObjectState(instance);
-                    return true;
+                    // Не нашли подходящий объект после 5 попыток
+                    instance = null;
+                    return false;
                 }
             }
 
@@ -68,12 +99,14 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
         {
             if (instance == null) return;
 
-            lock (_lockObject) // ✅ НОВОЕ: Thread safety
+            lock (_lockObject)
             {
-                // ✅ НОВОЕ: Проверяем, был ли объект выдан из пула
+                // ✅ ИСПРАВЛЕНО: Проверяем, был ли объект выдан из пула
                 if (!_objectsInUse.Contains(instance))
                 {
-                    // Объект не из пула - просто уничтожаем
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogInfo($"[ObjectPooling] Object not from pool, destroying: {instance.name}");
+
                     Object.Destroy(instance);
                     return;
                 }
@@ -94,7 +127,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                 if (pooledObj != null)
                 {
                     prefabHash = pooledObj.PrefabHash;
-                    pooledObj.MarkAsAvailable(); // ✅ НОВОЕ: Отмечаем как доступный
+                    pooledObj.MarkAsAvailable();
                 }
                 else
                 {
@@ -117,7 +150,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     Object.Destroy(instance);
 
                     if (Plugin.DebugLoggingEnabled.Value)
-                        Plugin.Log.LogWarning($"[ObjectPooling] Pool full ({MAX_POOL_SIZE}). Destroying excess object.");
+                        Plugin.Log.LogWarning($"[ObjectPooling] Pool full ({MAX_POOL_SIZE}), destroying: {instance.name}");
                 }
             }
         }
@@ -126,21 +159,15 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
         {
             try
             {
-                // 1. Сброс физики
+                // 1. ✅ ИСПРАВЛЕНО: Безопасный сброс физики
                 var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
                 foreach (var rb in rigidbodies)
                 {
-                    if (rb != null)
+                    if (rb != null && !rb.isKinematic) // ✅ Проверяем ПЕРЕД установкой velocity
                     {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[ObjectPooling] Cleanup Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}, velocity: {rb.linearVelocity}");
-
-                        if (!rb.isKinematic)
-                        {
-                            rb.linearVelocity = Vector3.zero;
-                            rb.angularVelocity = Vector3.zero;
-                            rb.Sleep();
-                        }
+                        rb.linearVelocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                        rb.Sleep();
                     }
                 }
 
@@ -163,26 +190,28 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     }
                 }
 
-                // 4. ✅ НОВОЕ: Очистка аудио
+                // 4. Очистка аудио
                 var audioSources = instance.GetComponentsInChildren<AudioSource>(true);
                 foreach (var audio in audioSources)
                 {
                     if (audio != null)
                     {
                         audio.Stop();
+                        audio.clip = null; // ✅ Освобождаем ссылку на клип
                     }
                 }
 
                 // 5. Сброс позиции
                 instance.transform.position = new Vector3(0, -10000, 0);
                 instance.transform.rotation = Quaternion.identity;
+                instance.transform.localScale = Vector3.one; // ✅ Сброс scale
 
                 if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[ObjectPooling] Cleaned up state for {instance.name}");
+                    Plugin.Log.LogInfo($"[ObjectPooling] Cleaned up: {instance.name}");
             }
             catch (System.Exception e)
             {
-                Plugin.Log.LogError($"[ObjectPooling] Error cleaning up object: {e.Message}");
+                Plugin.Log.LogError($"[ObjectPooling] Error cleaning up {instance.name}: {e.Message}");
             }
         }
 
@@ -190,19 +219,13 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
         {
             try
             {
-                // 1. Пробуждаем физику
+                // 1. ✅ ИСПРАВЛЕНО: Безопасное пробуждение физики
                 var rigidbodies = instance.GetComponentsInChildren<Rigidbody>(true);
                 foreach (var rb in rigidbodies)
                 {
-                    if (rb != null)
+                    if (rb != null && !rb.isKinematic) // ✅ Только для non-kinematic
                     {
-                        if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[ObjectPooling] Reset Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}");
-
-                        if (!rb.isKinematic)
-                        {
-                            rb.WakeUp();
-                        }
+                        rb.WakeUp();
                     }
                 }
 
@@ -212,22 +235,77 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     collider.enabled = true;
 
                 if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[ObjectPooling] Reset state for {instance.name}");
+                    Plugin.Log.LogInfo($"[ObjectPooling] Reset state: {instance.name}");
             }
             catch (System.Exception e)
             {
-                Plugin.Log.LogError($"[ObjectPooling] Error resetting object: {e.Message}");
+                Plugin.Log.LogError($"[ObjectPooling] Error resetting {instance.name}: {e.Message}");
             }
         }
 
-        // ✅ НОВОЕ: Метод для прогрева пула
-        public static void WarmupPool(string prefabName, int count)
+        // ✅ НОВОЕ: Периодическая очистка мертвых ссылок
+        public static void PerformMaintenance()
         {
-            // Эта функция будет реализована при создании объектов
-            Plugin.Log.LogInfo($"[ObjectPooling] Warmup requested for {prefabName} (x{count})");
+            lock (_lockObject)
+            {
+                _tempActiveCheck.Clear();
+
+                // Проверяем активные объекты
+                foreach (var obj in _objectsInUse)
+                {
+                    if (obj == null || !obj.activeSelf)
+                    {
+                        _tempActiveCheck.Add(obj);
+                    }
+                }
+
+                // Удаляем мертвые ссылки
+                foreach (var obj in _tempActiveCheck)
+                {
+                    _objectsInUse.Remove(obj);
+                    if (Plugin.DebugLoggingEnabled.Value)
+                        Plugin.Log.LogWarning($"[ObjectPooling] Cleaned dead reference from _objectsInUse");
+                }
+
+                // Очищаем мертвые объекты из пулов
+                var deadPools = new List<int>();
+                foreach (var kvp in _pools)
+                {
+                    var pool = kvp.Value;
+                    var validObjects = new Queue<GameObject>();
+
+                    while (pool.Count > 0)
+                    {
+                        var obj = pool.Dequeue();
+                        if (obj != null)
+                        {
+                            validObjects.Enqueue(obj);
+                        }
+                    }
+
+                    if (validObjects.Count == 0)
+                    {
+                        deadPools.Add(kvp.Key);
+                    }
+                    else
+                    {
+                        _pools[kvp.Key] = validObjects;
+                    }
+                }
+
+                // Удаляем пустые пулы
+                foreach (var hash in deadPools)
+                {
+                    _pools.Remove(hash);
+                }
+
+                if (Plugin.DebugLoggingEnabled.Value && (_tempActiveCheck.Count > 0 || deadPools.Count > 0))
+                {
+                    Plugin.Log.LogInfo($"[ObjectPooling] Maintenance: Removed {_tempActiveCheck.Count} dead references, {deadPools.Count} empty pools");
+                }
+            }
         }
 
-        // ✅ НОВОЕ: Статистика для дебага
         public static void LogPoolStats()
         {
             if (!Plugin.DebugLoggingEnabled.Value) return;
@@ -240,7 +318,30 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     totalPooled += pool.Count;
                 }
 
-                Plugin.Log.LogInfo($"[ObjectPooling] Stats - In use: {_objectsInUse.Count}, Pooled: {totalPooled}");
+                Plugin.Log.LogInfo($"[ObjectPooling] Stats - In use: {_objectsInUse.Count}, Pooled: {totalPooled}, Pool types: {_pools.Count}");
+            }
+        }
+
+        // ✅ НОВОЕ: Очистка при выгрузке мира
+        public static void Clear()
+        {
+            lock (_lockObject)
+            {
+                // Уничтожаем все объекты в пулах
+                foreach (var pool in _pools.Values)
+                {
+                    while (pool.Count > 0)
+                    {
+                        var obj = pool.Dequeue();
+                        if (obj != null)
+                            Object.Destroy(obj);
+                    }
+                }
+
+                _pools.Clear();
+                _objectsInUse.Clear();
+
+                Plugin.Log.LogInfo("[ObjectPooling] Cleared all pools");
             }
         }
     }

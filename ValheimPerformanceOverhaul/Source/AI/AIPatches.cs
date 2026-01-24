@@ -11,6 +11,10 @@ namespace ValheimPerformanceOverhaul.AI
         private const float AI_ACTIVATION_RADIUS = 120f;
         private const float AI_DEACTIVATION_RADIUS = 140f; // Hysteresis
 
+        // ✅ НОВОЕ: Slow update для далеких мобов (раз в 5 секунд)
+        private const float AI_SLOW_UPDATE_INTERVAL = 5f;
+        private static readonly Dictionary<BaseAI, float> _lastSlowUpdate = new Dictionary<BaseAI, float>();
+
         [HarmonyPatch(typeof(BaseAI), "Awake")]
         [HarmonyPostfix]
         private static void BaseAI_Awake_Postfix(BaseAI __instance)
@@ -19,16 +23,18 @@ namespace ValheimPerformanceOverhaul.AI
             {
                 __instance.gameObject.AddComponent<AIOptimizer>();
             }
+
+            // ✅ НОВОЕ: Инициализируем slow update timer
+            _lastSlowUpdate[__instance] = Time.time;
         }
 
-        // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: MonsterAI.UpdateAI - главная проверка дистанции ===
-        // ВАЖНО: MonsterAI OVERRIDE BaseAI.UpdateAI, поэтому патчим MonsterAI, а не BaseAI!
+        // ✅ ИСПРАВЛЕНО: MonsterAI.UpdateAI - главная проверка дистанции
         [HarmonyPatch(typeof(MonsterAI), "UpdateAI")]
         [HarmonyPrefix]
         private static bool MonsterAI_UpdateAI_Prefix(MonsterAI __instance, float dt)
         {
             if (!Plugin.AiThrottlingEnabled.Value) return true;
-            
+
             // Только на сервере или в синглплеере
             if (ZNet.instance != null && !ZNet.instance.IsServer()) return true;
 
@@ -36,14 +42,48 @@ namespace ValheimPerformanceOverhaul.AI
             if (optimizer == null) return true;
 
             float distToPlayer = optimizer.GetDistanceToPlayer();
-            
-            // Если моб далеко - НЕ обновляем AI
+
+            // ✅ ИСПРАВЛЕНО: Далекие мобы получают МЕДЛЕННЫЙ update
             if (distToPlayer > AI_ACTIVATION_RADIUS)
             {
-                return false; // Пропускаем обновление AI для далеких мобов
+                // Проверяем, прошло ли достаточно времени для slow update
+                if (!_lastSlowUpdate.TryGetValue(__instance, out float lastUpdate))
+                {
+                    _lastSlowUpdate[__instance] = Time.time;
+                    return false;
+                }
+
+                float timeSinceLastUpdate = Time.time - lastUpdate;
+
+                if (timeSinceLastUpdate < AI_SLOW_UPDATE_INTERVAL)
+                {
+                    return false; // Пропускаем этот update
+                }
+
+                // ✅ КРИТИЧНО: Обновляем раз в 5 секунд для:
+                // - Возврата домой
+                // - Проверки патруля
+                // - Обновления состояния
+                _lastSlowUpdate[__instance] = Time.time;
+
+                if (Plugin.DebugLoggingEnabled.Value && Time.frameCount % 300 == 0)
+                {
+                    Plugin.Log.LogInfo($"[AI] Slow update for {__instance.name} at {distToPlayer:F1}m");
+                }
+
+                return true; // Выполняем МЕДЛЕННЫЙ update
             }
 
-            return true; // Продолжаем нормальное выполнение
+            // ✅ Близкие мобы - нормальный update
+            return true;
+        }
+
+        // ✅ НОВОЕ: Очистка при уничтожении
+        [HarmonyPatch(typeof(BaseAI), "OnDestroy")]
+        [HarmonyPostfix]
+        private static void BaseAI_OnDestroy_Postfix(BaseAI __instance)
+        {
+            _lastSlowUpdate.Remove(__instance);
         }
 
         // === МОДУЛЬ: ПОИСК ВРАГОВ (кеширование) ===
@@ -88,10 +128,10 @@ namespace ValheimPerformanceOverhaul.AI
                 if (optimizer.GetCachedLOS(target, out bool cachedVisible))
                 {
                     __result = cachedVisible;
-                    return false; // Используем кешированный результат
+                    return false;
                 }
 
-                // Если игрок очень далеко (> 40м), LOS всегда false без raycast
+                // ✅ ОПТИМИЗАЦИЯ: Если игрок очень далеко, LOS всегда false без raycast
                 float distToPlayer = optimizer.GetDistanceToPlayer();
                 if (distToPlayer > 40f)
                 {
@@ -129,6 +169,39 @@ namespace ValheimPerformanceOverhaul.AI
                 return optimizer.ShouldCheckAttack();
             }
             return true;
+        }
+
+        // ✅ НОВОЕ: Периодическая очистка slow update cache
+        [HarmonyPatch(typeof(ZNet), "Update")]
+        [HarmonyPostfix]
+        private static void CleanupSlowUpdateCache()
+        {
+            if (!Plugin.AiThrottlingEnabled.Value) return;
+
+            // Очистка раз в минуту
+            if (Time.frameCount % 3600 == 0)
+            {
+                var toRemove = new List<BaseAI>();
+                float currentTime = Time.time;
+
+                foreach (var kvp in _lastSlowUpdate)
+                {
+                    if (kvp.Key == null || currentTime - kvp.Value > 60f)
+                    {
+                        toRemove.Add(kvp.Key);
+                    }
+                }
+
+                foreach (var ai in toRemove)
+                {
+                    _lastSlowUpdate.Remove(ai);
+                }
+
+                if (Plugin.DebugLoggingEnabled.Value && toRemove.Count > 0)
+                {
+                    Plugin.Log.LogInfo($"[AI] Cleaned {toRemove.Count} stale slow update entries");
+                }
+            }
         }
     }
 }
