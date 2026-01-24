@@ -7,6 +7,7 @@ using UnityEngine;
 using ValheimPerformanceOverhaul.ObjectPooling;
 using ValheimPerformanceOverhaul.LightCulling;
 using ValheimPerformanceOverhaul.Audio;
+using ValheimPerformanceOverhaul.AI;
 
 namespace ValheimPerformanceOverhaul
 {
@@ -157,6 +158,14 @@ namespace ValheimPerformanceOverhaul
                 manager.AddComponent<DistanceCullerManager>();
                 DontDestroyOnLoad(manager);
                 Log.LogInfo("[DistanceCuller] Manager initialized.");
+            }
+
+            if (AiThrottlingEnabled.Value)
+            {
+                var aiManager = new GameObject("_VPO_AIOptimizer");
+                aiManager.AddComponent<AIOptimizer>();
+                DontDestroyOnLoad(aiManager);
+                Log.LogInfo("[AI] Optimizer manager initialized.");
             }
         }
 

@@ -140,6 +140,8 @@
     <Compile Include="Source\ObjectPooling\ObjectPoolingPatches.cs" />
     <Compile Include="Source\ObjectPooling\ObjectPoolManager.cs" />
     <Compile Include="Source\ObjectPooling\PooledObject.cs" />
+    <Compile Include="Source\AI\AIOptimizer.cs" />
+    <Compile Include="Source\AI\AIPatches.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

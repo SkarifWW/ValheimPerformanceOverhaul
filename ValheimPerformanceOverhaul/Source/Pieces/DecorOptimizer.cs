@@ -55,7 +55,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
                     if (!rb.isKinematic)
                     {
-                        rb.velocity = Vector3.zero;
+                        rb.linearVelocity = Vector3.zero;
                         rb.angularVelocity = Vector3.zero;
                     }
                     rb.isKinematic = true;

@@ -1,8 +1,6 @@
 ﻿using HarmonyLib;
 using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine.UI;
-using UnityEngine;
 namespace ValheimPerformanceOverhaul.Particles
 {
     public class TrackedParticle : MonoBehaviour
@@ -83,7 +81,7 @@ namespace ValheimPerformanceOverhaul.Particles
 
         private void ScanForParticles()
         {
-            ParticleSystem[] particles = FindObjectsOfType<ParticleSystem>(true);
+            ParticleSystem[] particles = Object.FindObjectsByType<ParticleSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var ps in particles)
             {
                 RegisterParticleSystem(ps);

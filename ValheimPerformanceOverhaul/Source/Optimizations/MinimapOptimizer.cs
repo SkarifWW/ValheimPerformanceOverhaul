@@ -1,10 +1,6 @@
 ﻿using HarmonyLib;
 using System.Reflection;
 using UnityEngine;
-using ValheimPerformanceOverhaul;
-using HarmonyLib;
-using UnityEngine;
-using System.Reflection;
 
 namespace ValheimPerformanceOverhaul
 {

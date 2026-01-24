@@ -133,11 +133,11 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                     if (rb != null)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[ObjectPooling] Cleanup Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}, velocity: {rb.velocity}");
+                            Plugin.Log.LogInfo($"[ObjectPooling] Cleanup Rigidbody on {instance.name} (child: {rb.gameObject.name}), isKinematic: {rb.isKinematic}, velocity: {rb.linearVelocity}");
 
                         if (!rb.isKinematic)
                         {
-                            rb.velocity = Vector3.zero;
+                            rb.linearVelocity = Vector3.zero;
                             rb.angularVelocity = Vector3.zero;
                             rb.Sleep();
                         }
