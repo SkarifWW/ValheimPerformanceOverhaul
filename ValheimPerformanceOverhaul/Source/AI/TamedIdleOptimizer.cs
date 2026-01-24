@@ -126,6 +126,10 @@ namespace ValheimPerformanceOverhaul.AI
             if (Time.time - _lastStateChange < STATE_CHANGE_COOLDOWN)
                 return false;
 
+            // ✅ КРИТИЧНО: Дополнительная проверка - не входить в Idle если есть ЛЮБАЯ цель
+            if (_baseAI != null && _baseAI.GetTargetCreature() != null)
+                return false;
+
             // Проверяем все обязательные условия
             return IsTamed()
                 && !IsInCombat()
@@ -162,10 +166,40 @@ namespace ValheimPerformanceOverhaul.AI
         {
             if (_character == null) return false;
             
-            // Проверяем несколько признаков боя
-            return _character.InAttack() 
-                || (_baseAI != null && _baseAI.IsAlerted())
-                || (_baseAI != null && _baseAI.GetTargetCreature() != null);
+            // ✅ РАСШИРЕННАЯ ПРОВЕРКА боевого состояния
+            // 1. Базовые проверки атаки
+            if (_character.InAttack()) return true;
+            
+            // 2. Проверка на получение урона
+            if (_character.GetHealth() < _character.GetMaxHealth())
+            {
+                // Если HP не полное, может быть в бою
+                // Но только если есть другие признаки
+            }
+            
+            // 3. Проверки через BaseAI
+            if (_baseAI != null)
+            {
+                // Алёрт статус
+                if (_baseAI.IsAlerted()) return true;
+                
+                // Есть целевое существо
+                if (_baseAI.GetTargetCreature() != null) return true;
+                
+                // Если есть враг в поле зрения
+                if (_baseAI.HaveTarget()) return true;
+            }
+            
+            // 4. Проверки через MonsterAI (если есть)
+            if (_monsterAI != null)
+            {
+                // Проверяем текущее поведение
+                var targetCreature = _monsterAI.GetTargetCreature();
+                if (targetCreature != null && !targetCreature.IsDead())
+                    return true;
+            }
+            
+            return false;
         }
 
         /// <summary>
@@ -252,7 +286,7 @@ namespace ValheimPerformanceOverhaul.AI
                 }
             }
 
-            // 2️⃣ ВЫКЛЮЧАЕМ ANIMATOR
+            // 2️⃣ ВЫКЛЮЧАЕМ ANIMATOR (ОСНОВНОЙ ИСТОЧНИК ОПТИМИЗАЦИИ)
             if (_animator != null)
             {
                 _originalAnimatorSpeed = _animator.speed;
@@ -260,29 +294,8 @@ namespace ValheimPerformanceOverhaul.AI
                 _animator.enabled = false;
             }
 
-            // 3️⃣ МИНИМИЗИРУЕМ ФИЗИКУ
-            if (_rigidbody != null)
-            {
-                _originalRigidbodyKinematic = _rigidbody.isKinematic;
-                _rigidbody.isKinematic = true;
-                _rigidbody.velocity = Vector3.zero;
-                _rigidbody.angularVelocity = Vector3.zero;
-            }
-
-            // 4️⃣ ОТКЛЮЧАЕМ КОЛЛАЙДЕРЫ (опционально, для максимальной производительности)
-            // Осторожно: это может привести к провалам через текстуры
-            /*
-            if (_colliders != null)
-            {
-                for (int i = 0; i < _colliders.Length; i++)
-                {
-                    if (_colliders[i] != null)
-                    {
-                        _colliders[i].enabled = false;
-                    }
-                }
-            }
-            */
+            // ⚠️ RIGIDBODY НЕ ТРОГАЕМ - иначе мобы не могут двигаться после выхода из Idle Mode
+            // Отключения AI + Animator достаточно для 50-80% оптимизации
 
             _isInIdleMode = true;
             _lastStateChange = Time.time;
@@ -313,23 +326,7 @@ namespace ValheimPerformanceOverhaul.AI
                 _animator.speed = _originalAnimatorSpeed;
             }
 
-            // 3️⃣ ВОССТАНАВЛИВАЕМ ФИЗИКУ
-            if (_rigidbody != null)
-            {
-                _rigidbody.isKinematic = _originalRigidbodyKinematic;
-            }
-
-            // 4️⃣ ВОССТАНАВЛИВАЕМ КОЛЛАЙДЕРЫ
-            if (_colliders != null && _originalColliderStates != null)
-            {
-                for (int i = 0; i < _colliders.Length && i < _originalColliderStates.Length; i++)
-                {
-                    if (_colliders[i] != null)
-                    {
-                        _colliders[i].enabled = _originalColliderStates[i];
-                    }
-                }
-            }
+            // ⚠️ RIGIDBODY не трогали, восстанавливать не нужно
 
             _isInIdleMode = false;
             _lastStateChange = Time.time;

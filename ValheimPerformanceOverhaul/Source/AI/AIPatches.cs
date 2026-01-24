@@ -8,8 +8,10 @@ namespace ValheimPerformanceOverhaul.AI
     public static class AIPatches
     {
         // === МОДУЛЬ 1: AI АКТИВАЦИЯ ПО ДИСТАНЦИИ ===
-        private const float AI_ACTIVATION_RADIUS = 120f;
-        private const float AI_DEACTIVATION_RADIUS = 140f; // Hysteresis
+        // ⚠️ КРИТИЧНО: Радиус НЕ должен быть слишком большим!
+        // Мобы в пределах этого радиуса должны ПОЛНОСТЬЮ работать
+        private const float AI_ACTIVATION_RADIUS = 60f;  // Было 120f - слишком много!
+        private const float AI_DEACTIVATION_RADIUS = 80f; // Hysteresis
 
         // ✅ НОВОЕ: Slow update для далеких мобов (раз в 5 секунд)
         private const float AI_SLOW_UPDATE_INTERVAL = 5f;
@@ -53,7 +55,14 @@ namespace ValheimPerformanceOverhaul.AI
 
             float distToPlayer = optimizer.GetDistanceToPlayer();
 
-            // ✅ ИСПРАВЛЕНО: Далекие мобы получают МЕДЛЕННЫЙ update
+            // ⚠️ КРИТИЧНО: Мобы в БОЕВОМ радиусе (< 60м) ВСЕГДА получают полный AI
+            // НЕ throttle вообще - пусть работают на 100%
+            if (distToPlayer <= AI_ACTIVATION_RADIUS)
+            {
+                return true; // Полный AI update каждый кадр
+            }
+
+            // ✅ ТОЛЬКО далекие мобы (> 60м) получают МЕДЛЕННЫЙ update
             if (distToPlayer > AI_ACTIVATION_RADIUS)
             {
                 // Проверяем, прошло ли достаточно времени для slow update
@@ -84,7 +93,7 @@ namespace ValheimPerformanceOverhaul.AI
                 return true; // Выполняем МЕДЛЕННЫЙ update
             }
 
-            // ✅ Близкие мобы - нормальный update
+            // Не должны сюда попасть, но на всякий случай
             return true;
         }
 

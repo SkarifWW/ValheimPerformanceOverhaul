@@ -156,6 +156,18 @@ namespace ValheimPerformanceOverhaul.AI
         {
             if (_rigidbody != null)
             {
+                // ✅ КРИТИЧНО: Очищаем velocity ДО установки kinematic
+                // Иначе Unity спамит warning: "Setting linear velocity of a kinematic body is not supported"
+                if (!active)
+                {
+                    // Очищаем velocity ПЕРЕД установкой kinematic
+                    if (!_rigidbody.isKinematic)
+                    {
+                        _rigidbody.velocity = Vector3.zero;
+                        _rigidbody.angularVelocity = Vector3.zero;
+                    }
+                }
+                
                 _rigidbody.isKinematic = !active;
             }
 
