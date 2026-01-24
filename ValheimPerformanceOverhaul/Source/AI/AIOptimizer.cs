@@ -8,6 +8,7 @@ namespace ValheimPerformanceOverhaul.AI
     {
         private BaseAI _ai;
         private ZNetView _nview;
+        private Character _character;
         
         private float _distCheckTimer;
         private const float DIST_CHECK_INTERVAL = 1.0f;
@@ -25,11 +26,32 @@ namespace ValheimPerformanceOverhaul.AI
 
         private readonly Dictionary<int, (bool visible, float time)> _losCache = new Dictionary<int, (bool, float)>();
 
+        // === МОДУЛЬ 5: Physics Sleep ===
+        private Rigidbody _rigidbody;
+        private Collider[] _colliders;
+        private bool _physicsActive = true;
+
+        // === МОДУЛЬ 7: Animator Optimization ===
+        private Animator _animator;
+        private bool _animatorActive = true;
+        private float _originalAnimatorSpeed = 1f;
+
         private void Awake()
         {
             _ai = GetComponent<BaseAI>();
             _nview = GetComponent<ZNetView>();
+            _character = GetComponent<Character>();
             _distCheckTimer = Random.Range(0f, DIST_CHECK_INTERVAL);
+
+            // Получаем компоненты для оптимизации
+            _rigidbody = GetComponent<Rigidbody>();
+            _colliders = GetComponentsInChildren<Collider>();
+            _animator = GetComponentInChildren<Animator>();
+            
+            if (_animator != null)
+            {
+                _originalAnimatorSpeed = _animator.speed;
+            }
         }
 
         public float GetDistanceToPlayer() => Mathf.Sqrt(_closestPlayerDistSqr);
@@ -43,6 +65,7 @@ namespace ValheimPerformanceOverhaul.AI
             _distCheckTimer = 0f;
 
             UpdateClosestPlayerDistance();
+            UpdatePhysicsAndAnimator();
         }
 
         private void UpdateClosestPlayerDistance()
@@ -64,6 +87,77 @@ namespace ValheimPerformanceOverhaul.AI
                 if (distSqr < _closestPlayerDistSqr)
                     _closestPlayerDistSqr = distSqr;
             }
+        }
+
+        // === МОДУЛЬ 5 & 7: Physics and Animator Management ===
+        private void UpdatePhysicsAndAnimator()
+        {
+            if (!Plugin.AiThrottlingEnabled.Value) return;
+
+            float dist = GetDistanceToPlayer();
+
+            // МОДУЛЬ 5: Physics Sleep
+            if (Plugin.CullPhysicsEnabled.Value && _rigidbody != null)
+            {
+                bool shouldBeActive = dist < 120f; // Радиус активации физики
+                
+                if (shouldBeActive != _physicsActive)
+                {
+                    SetPhysicsActive(shouldBeActive);
+                }
+            }
+
+            // МОДУЛЬ 7: Animator Optimization
+            if (Plugin.AnimatorOptimizationEnabled.Value && _animator != null)
+            {
+                if (dist > 120f) // Очень далеко - выключаем
+                {
+                    if (_animatorActive)
+                    {
+                        _animator.enabled = false;
+                        _animatorActive = false;
+                    }
+                }
+                else if (dist > 60f) // Средняя дистанция - замедляем
+                {
+                    if (!_animatorActive)
+                    {
+                        _animator.enabled = true;
+                        _animatorActive = true;
+                    }
+                    _animator.speed = _originalAnimatorSpeed * 0.5f; // 50% скорости анимации
+                }
+                else // Близко - полная скорость
+                {
+                    if (!_animatorActive)
+                    {
+                        _animator.enabled = true;
+                        _animatorActive = true;
+                    }
+                    _animator.speed = _originalAnimatorSpeed;
+                }
+            }
+        }
+
+        private void SetPhysicsActive(bool active)
+        {
+            if (_rigidbody != null)
+            {
+                _rigidbody.isKinematic = !active;
+            }
+
+            if (_colliders != null)
+            {
+                foreach (var collider in _colliders)
+                {
+                    if (collider != null)
+                    {
+                        collider.enabled = active;
+                    }
+                }
+            }
+
+            _physicsActive = active;
         }
 
         // --- Throttling Logic ---
