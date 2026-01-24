@@ -24,6 +24,16 @@ namespace ValheimPerformanceOverhaul.AI
                 __instance.gameObject.AddComponent<AIOptimizer>();
             }
 
+            // ✅ НОВОЕ: Добавляем TamedIdleOptimizer для прирученных мобов
+            var character = __instance.GetComponent<Character>();
+            if (character != null && character.IsTamed())
+            {
+                if (__instance.GetComponent<TamedIdleOptimizer>() == null)
+                {
+                    __instance.gameObject.AddComponent<TamedIdleOptimizer>();
+                }
+            }
+
             // ✅ НОВОЕ: Инициализируем slow update timer
             _lastSlowUpdate[__instance] = Time.time;
         }

@@ -111,6 +111,12 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<int> MinimapTextureSize;
         public static ConfigEntry<int> MinimapUpdateInterval;
 
+        // Секция 16: Tamed Mob Idle Optimization
+        public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
+        public static ConfigEntry<float> TamedIdleDistanceFromCombat;
+        public static ConfigEntry<float> TamedIdleBaseDetectionRadius;
+        public static ConfigEntry<float> TamedIdleCheckInterval;
+
         private void Awake()
         {
             Log = Logger;
@@ -595,6 +601,37 @@ namespace ValheimPerformanceOverhaul
                 new ConfigDescription(
                     "Update minimap every N frames.",
                     new AcceptableValueRange<int>(1, 10)));
+
+            // Секция 16: Tamed Mob Idle Optimization
+            TamedIdleOptimizationEnabled = Config.Bind(
+                "16. Tamed Mob Idle Optimization",
+                "Enabled",
+                true,
+                "Enables BASE IDLE MODE for tamed mobs on base. Dramatically reduces CPU load from idle tamed creatures.");
+
+            TamedIdleDistanceFromCombat = Config.Bind(
+                "16. Tamed Mob Idle Optimization",
+                "Idle Distance From Combat (seconds)",
+                5f,
+                new ConfigDescription(
+                    "Time after combat before mob can enter idle mode.",
+                    new AcceptableValueRange<float>(3f, 30f)));
+
+            TamedIdleBaseDetectionRadius = Config.Bind(
+                "16. Tamed Mob Idle Optimization",
+                "Base Detection Radius",
+                30f,
+                new ConfigDescription(
+                    "Radius to detect player structures (base detection).",
+                    new AcceptableValueRange<float>(15f, 60f)));
+
+            TamedIdleCheckInterval = Config.Bind(
+                "16. Tamed Mob Idle Optimization",
+                "Check Interval (seconds)",
+                1f,
+                new ConfigDescription(
+                    "How often to check if mob should enter/exit idle mode.",
+                    new AcceptableValueRange<float>(0.5f, 5f)));
         }
 
         private void ApplyImmediateGraphicsSettings()
