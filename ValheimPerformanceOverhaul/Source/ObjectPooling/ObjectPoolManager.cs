@@ -165,7 +165,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
                 {
                     if (rb != null && !rb.isKinematic) // ✅ Проверяем ПЕРЕД установкой velocity
                     {
-                        rb.linearVelocity = Vector3.zero;
+                        rb.velocity = Vector3.zero;
                         rb.angularVelocity = Vector3.zero;
                         rb.Sleep();
                     }

@@ -46,8 +46,7 @@ namespace ValheimPerformanceOverhaul.AI
             _ai = GetComponent<BaseAI>();
             _nview = GetComponent<ZNetView>();
             _character = GetComponent<Character>();
-            _distCheckTimer = Random.Range(0f, DIST_CHECK_INTERVAL);
-
+            
             // Получаем компоненты для оптимизации
             _rigidbody = GetComponent<Rigidbody>();
             _colliders = GetComponentsInChildren<Collider>();
@@ -56,6 +55,36 @@ namespace ValheimPerformanceOverhaul.AI
             if (_animator != null)
             {
                 _originalAnimatorSpeed = _animator.speed;
+            }
+        }
+
+        private void OnEnable()
+        {
+            // ✅ КРИТИЧНО: Сброс состояния при взятии из пула
+            _closestPlayerDistSqr = 0f; // Считаем что игрок рядом пока не доказано обратное
+            _distCheckTimer = DIST_CHECK_INTERVAL; // Force update next frame
+            
+            _cachedEnemy = null;
+            _lastEnemyCheck = -100f;
+            _lastAttackCheck = -100f;
+            _lastPathUpdate = -100f;
+            _lastPathTargetPos = Vector3.zero;
+            
+            _losCache.Clear();
+            _losCleanupTimer = 0f;
+
+            _physicsActive = true;
+            _animatorActive = true;
+            
+            if (_animator != null)
+            {
+                _animator.enabled = true;
+                _animator.speed = _originalAnimatorSpeed;
+            }
+            
+            if (_rigidbody != null && !_rigidbody.isKinematic)
+            {
+                _rigidbody.WakeUp();
             }
         }
 
@@ -154,21 +183,25 @@ namespace ValheimPerformanceOverhaul.AI
 
         private void SetPhysicsActive(bool active)
         {
+            // ✅ ИСПРАВЛЕНИЕ #2: Не трогаем isKinematic для Characters
+            // Unity спамит "Setting linear velocity of a kinematic body is not supported",
+            // потому что Character контроллер пытается двигать тело, а мы делали его kinematic.
+            bool isCharacter = _character != null;
+
             if (_rigidbody != null)
             {
-                // ✅ КРИТИЧНО: Очищаем velocity ДО установки kinematic
-                // Иначе Unity спамит warning: "Setting linear velocity of a kinematic body is not supported"
-                if (!active)
+                if (!isCharacter) // ТОЛЬКО для предметов/обломков
                 {
-                    // Очищаем velocity ПЕРЕД установкой kinematic
-                    if (!_rigidbody.isKinematic)
+                    if (!active)
                     {
-                        _rigidbody.velocity = Vector3.zero;
-                        _rigidbody.angularVelocity = Vector3.zero;
+                        if (!_rigidbody.isKinematic)
+                        {
+                            _rigidbody.velocity = Vector3.zero;
+                            _rigidbody.angularVelocity = Vector3.zero;
+                        }
                     }
+                    _rigidbody.isKinematic = !active;
                 }
-                
-                _rigidbody.isKinematic = !active;
             }
 
             if (_colliders != null)
