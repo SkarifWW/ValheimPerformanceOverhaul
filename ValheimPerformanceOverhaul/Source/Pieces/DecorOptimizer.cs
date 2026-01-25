@@ -1,88 +1,80 @@
 ﻿using HarmonyLib;
 using UnityEngine;
-using System.Collections.Generic;
+using ValheimPerformanceOverhaul;
 
 namespace ValheimPerformanceOverhaul.Pieces
 {
     [HarmonyPatch(typeof(Piece), "Awake")]
     public static class DecorOptimizer
     {
-        // ✅ КРИТИЧНО: Используем WeakReference для автоматической очистки
-        private static readonly HashSet<int> _processedInstances = new HashSet<int>(256);
-
-        // ✅ КРИТИЧНО: Счетчик для периодической очистки
-        private static int _totalProcessed = 0;
-        private const int CLEANUP_THRESHOLD = 200; // Уменьшено с 500 для более частой очистки
-
         [HarmonyPostfix]
         private static void Postfix(Piece __instance)
         {
-            // ✅ КРИТИЧНО: Проверяем конфиг ПЕРВЫМ делом
             if (!Plugin.PieceOptimizationEnabled.Value) return;
 
-            if (__instance == null || __instance.gameObject == null) return;
-            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost")) return;
-
-            // ✅ КРИТИЧНО: Только для Misc категории
-            if (__instance.m_category != Piece.PieceCategory.Misc) return;
-
-            // ✅ Периодическая очистка
-            _totalProcessed++;
-            if (_totalProcessed >= CLEANUP_THRESHOLD)
+            // ✅ FIX: Пропускаем ghost объекты (проекции при строительстве)
+            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
             {
-                _totalProcessed = 0;
-                _processedInstances.Clear();
-
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo("[DecorOptimizer] Cleared processed cache");
-            }
-
-            int instanceId = __instance.GetInstanceID();
-
-            // ✅ КРИТИЧНО: Защита от повторной обработки
-            if (!_processedInstances.Add(instanceId))
-            {
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogWarning($"[DecorOptimizer] Skipping duplicate: {__instance.name}");
                 return;
             }
 
-            // Исключения
-            string name = __instance.name.ToLower();
-            if (name.Contains("portal") || name.Contains("bed") || name.Contains("workbench"))
-                return;
+            if (__instance.m_category == Piece.PieceCategory.Misc)
+            {
+                OptimizeDecor(__instance);
+            }
+        }
 
-            GameObject go = __instance.gameObject;
+        private static void OptimizeDecor(Piece piece)
+        {
+            if (piece == null) return;
+
+            // SAFETY: Do not optimize if it has components that imply dynamic behavior
+            if (piece.GetComponent<ZSyncTransform>() != null ||
+                piece.GetComponent<Character>() != null ||
+                piece.GetComponent<BaseAI>() != null)
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[DecorOptimizer] Skipping optimization for {piece.name} (detected dynamic component)");
+                return;
+            }
+
+            // Exclusion list from config
+            string cleanName = piece.name.Replace("(Clone)", "");
+            if (Plugin.CullerExclusions.Value.Contains(cleanName))
+            {
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[DecorOptimizer] Skipping optimization for {piece.name} (manual exclusion)");
+                return;
+            }
+
+            GameObject go = piece.gameObject;
             if (go == null) return;
 
             try
             {
-                // ✅ КРИТИЧНО: НЕ трогаем Rigidbody ВООБЩЕ
-                // DistanceCuller управляет физикой
-
-                // Только отключаем коллайдеры для неинтерактивного декора
-                bool isInteractive = go.GetComponent<Hoverable>() != null ||
-                                     go.GetComponent<Interactable>() != null ||
-                                     go.GetComponent<Container>() != null ||
-                                     go.GetComponent<Door>() != null;
-
-                if (!isInteractive)
+                // ✅ КРИТИЧНО: Обработка Rigidbody
+                var rigidbodies = go.GetComponentsInChildren<Rigidbody>(true);
+                foreach (var rb in rigidbodies)
                 {
-                    var colliders = go.GetComponentsInChildren<Collider>(false);
-                    if (colliders != null && colliders.Length > 0)
+                    if (rb != null)
                     {
-                        foreach (var col in colliders)
+                        // ✅ ИСПРАВЛЕНО: Обнуляем velocity ПЕРЕД установкой kinematic
+                        if (!rb.isKinematic)
                         {
-                            if (col != null && !col.isTrigger)
-                            {
-                                col.enabled = false;
-                            }
+                            rb.linearVelocity = Vector3.zero;
+                            rb.angularVelocity = Vector3.zero;
+                            rb.Sleep();
                         }
 
+                        // Теперь безопасно делать kinematic
+                        rb.isKinematic = true;
+
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogInfo($"[DecorOptimizer] Disabled {colliders.Length} colliders on {name}");
+                            Plugin.Log.LogInfo($"[DecorOptimizer] Made Rigidbody kinematic on {piece.name} (child: {rb.gameObject.name})");
                     }
                 }
+
+                // Примечание: Коллайдеры НЕ отключаем - DistanceCuller управляет ими по дистанции
             }
             catch (System.Exception e)
             {
@@ -91,18 +83,6 @@ namespace ValheimPerformanceOverhaul.Pieces
                     Plugin.Log.LogError($"[DecorOptimizer] Error on {go.name}: {e.Message}");
                 }
             }
-        }
-
-        // ✅ НОВОЕ: Принудительная очистка при выгрузке мира
-        [HarmonyPatch(typeof(ZNet), "Shutdown")]
-        [HarmonyPostfix]
-        private static void OnWorldUnload()
-        {
-            _processedInstances.Clear();
-            _totalProcessed = 0;
-
-            if (Plugin.DebugLoggingEnabled.Value)
-                Plugin.Log.LogInfo("[DecorOptimizer] Cleared on world unload");
         }
     }
 }

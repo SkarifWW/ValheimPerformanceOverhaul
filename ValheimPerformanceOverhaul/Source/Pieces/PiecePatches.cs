@@ -1,4 +1,4 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using UnityEngine;
 using ValheimPerformanceOverhaul;
 using System.Collections.Concurrent;
@@ -9,7 +9,7 @@ namespace ValheimPerformanceOverhaul.Pieces
     {
         private static readonly ConcurrentDictionary<Piece, bool> _placedByPlayerCache =
             new ConcurrentDictionary<Piece, bool>();
-        
+
         private static readonly ConcurrentDictionary<Piece, long> _creatorCache =
             new ConcurrentDictionary<Piece, long>();
 
@@ -18,6 +18,13 @@ namespace ValheimPerformanceOverhaul.Pieces
         private static void Piece_Awake_Postfix(Piece __instance)
         {
             if (!Plugin.PieceOptimizationEnabled.Value) return;
+
+            // ✅ FIX: Пропускаем ghost объекты (проекции при строительстве)
+            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
+            {
+                return;
+            }
+
             PieceSleepManager.Instance?.RegisterPiece(__instance);
         }
 

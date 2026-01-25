@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using HarmonyLib;
 using ValheimPerformanceOverhaul; // Plugin
@@ -12,7 +12,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         // Grid system for batching (size 32x32?)
         private const int GRID_SIZE = 32;
         private readonly Dictionary<Vector2Int, BatchChunk> _chunks = new Dictionary<Vector2Int, BatchChunk>();
-        
+
         // Setup via Plugin?
         public bool BatchingEnabled => Plugin.PieceOptimizationEnabled.Value; // Should have its own config?
 
@@ -27,32 +27,32 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (!BatchingEnabled) return;
             if (piece.m_category != Piece.PieceCategory.Misc) return;
-            
+
             // Only batch if it has a MeshFilter/Renderer and is static
             var mf = piece.GetComponentInChildren<MeshFilter>();
             var mr = piece.GetComponentInChildren<MeshRenderer>();
-            
+
             if (mf == null || mr == null) return;
             if (mr.sharedMaterial == null) return;
 
             Vector2Int gridPos = GetGridPos(piece.transform.position);
-            
+
             if (!_chunks.ContainsKey(gridPos))
             {
                 _chunks[gridPos] = new BatchChunk(gridPos);
             }
-            
+
             _chunks[gridPos].AddPiece(piece, mf, mr);
         }
 
         public void UnregisterPiece(Piece piece)
         {
-             // If a piece is destroyed, we must invalidate the batch
-             Vector2Int gridPos = GetGridPos(piece.transform.position);
-             if (_chunks.TryGetValue(gridPos, out BatchChunk chunk))
-             {
-                 chunk.RemovePiece(piece);
-             }
+            // If a piece is destroyed, we must invalidate the batch
+            Vector2Int gridPos = GetGridPos(piece.transform.position);
+            if (_chunks.TryGetValue(gridPos, out BatchChunk chunk))
+            {
+                chunk.RemovePiece(piece);
+            }
         }
 
         private Vector2Int GetGridPos(Vector3 pos)
@@ -70,7 +70,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                 if (chunk.IsDirty && Time.time - chunk.LastUpdateTime > 2.0f)
                 {
                     chunk.Rebuild();
-                    break; 
+                    break;
                 }
             }
         }
@@ -80,10 +80,10 @@ namespace ValheimPerformanceOverhaul.Pieces
             public Vector2Int GridPos;
             public bool IsDirty;
             public float LastUpdateTime;
-            
+
             private List<PieceEntry> _entries = new List<PieceEntry>();
             private GameObject _batchRoot;
-            
+
             private struct PieceEntry
             {
                 public Piece Piece;
@@ -121,14 +121,14 @@ namespace ValheimPerformanceOverhaul.Pieces
             {
                 IsDirty = false;
                 LastUpdateTime = Time.time;
-                
+
                 // Cleanup old batch
                 if (_batchRoot != null)
                 {
                     Destroy(_batchRoot);
                 }
 
-                if (_entries.Count < 2) 
+                if (_entries.Count < 2)
                 {
                     // Not enough items to batch, just enable originals
                     foreach (var e in _entries)
@@ -140,11 +140,11 @@ namespace ValheimPerformanceOverhaul.Pieces
 
                 // Group by Material
                 var matGroups = new Dictionary<Material, List<CombineInstance>>();
-                
+
                 foreach (var e in _entries)
                 {
                     if (e.Piece == null || e.MF == null || e.MR == null) continue;
-                    
+
                     Material mat = e.MR.sharedMaterial;
                     if (mat == null) continue;
 
@@ -158,34 +158,34 @@ namespace ValheimPerformanceOverhaul.Pieces
                     var combine = new CombineInstance();
                     combine.mesh = e.MF.sharedMesh;
                     combine.transform = e.MF.transform.localToWorldMatrix;
-                    
+
                     matGroups[mat].Add(combine);
-                    
+
                     // Disable original
                     e.MR.enabled = false;
                 }
 
                 // Create Batches
                 _batchRoot = new GameObject($"_Batch_{GridPos.x}_{GridPos.y}");
-                
+
                 foreach (var kvp in matGroups)
                 {
                     Material mat = kvp.Key;
                     List<CombineInstance> combines = kvp.Value;
-                    
+
                     // Unity mesh limit
                     if (combines.Count > 0)
                     {
                         GameObject go = new GameObject($"Batch_{mat.name}");
                         go.transform.SetParent(_batchRoot.transform);
                         go.transform.position = Vector3.zero; // World space meshes
-                        
+
                         var mf = go.AddComponent<MeshFilter>();
                         var mr = go.AddComponent<MeshRenderer>();
-                        
+
                         Mesh newMesh = new Mesh();
                         newMesh.CombineMeshes(combines.ToArray(), true, true);
-                        
+
                         mf.sharedMesh = newMesh;
                         mr.sharedMaterial = mat;
                     }
@@ -193,7 +193,7 @@ namespace ValheimPerformanceOverhaul.Pieces
             }
         }
     }
-    
+
     // Patch to hook into DecorBatcher
     [HarmonyPatch(typeof(Piece), "Awake")]
     public static class DecorBatcher_Awake_Patch
@@ -201,6 +201,12 @@ namespace ValheimPerformanceOverhaul.Pieces
         [HarmonyPostfix]
         private static void Postfix(Piece __instance)
         {
+            // ✅ FIX: Пропускаем ghost объекты (проекции при строительстве)
+            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
+            {
+                return;
+            }
+
             DecorBatcher.Instance?.RegisterPiece(__instance);
         }
     }
