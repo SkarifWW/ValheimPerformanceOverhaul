@@ -302,37 +302,25 @@ namespace ValheimPerformanceOverhaul.AI
         }
 
         // ✅ КРИТИЧНО: Очистка LOS кэша для предотвращения утечки памяти
+        // ✅ ДОБАВИТЬ периодическую очистку
         private void CleanupLOSCache()
         {
-            if (_losCache.Count == 0) return;
+            if (Time.frameCount % 600 != 0) return; // Раз в 10 секунд
 
             float currentTime = Time.time;
-            var keysToRemove = new List<int>();
+            var deadKeys = new List<int>();
 
-            // Удаляем устаревшие записи (> 5 секунд)
             foreach (var kvp in _losCache)
             {
-                if (currentTime - kvp.Value.time > LOS_CACHE_TIMEOUT)
+                if (currentTime - kvp.Value.time > 10f) // Старше 10 секунд
                 {
-                    keysToRemove.Add(kvp.Key);
+                    deadKeys.Add(kvp.Key);
                 }
             }
 
-            foreach (var key in keysToRemove)
+            foreach (var key in deadKeys)
             {
                 _losCache.Remove(key);
-            }
-
-            // Жесткий лимит - если кэш превышен, очищаем полностью
-            if (_losCache.Count > MAX_LOS_CACHE_SIZE)
-            {
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogWarning($"[AIOptimizer] LOS cache exceeded limit ({_losCache.Count}), clearing");
-                _losCache.Clear();
-            }
-            else if (keysToRemove.Count > 0 && Plugin.DebugLoggingEnabled.Value)
-            {
-                Plugin.Log.LogInfo($"[AIOptimizer] Cleaned {keysToRemove.Count} stale LOS cache entries");
             }
         }
 

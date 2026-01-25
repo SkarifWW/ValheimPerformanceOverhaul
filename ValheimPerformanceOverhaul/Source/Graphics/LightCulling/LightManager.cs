@@ -308,7 +308,16 @@ namespace ValheimPerformanceOverhaul.LightCulling
             {
                 Plugin.Log.LogInfo($"[LightCulling] Cleaned {removed} null lights, array size: {_lightInfos.Length}");
             }
-        }
+
+            // ✅ НОВОЕ: Уменьшаем массив если он слишком большой
+            int optimalSize = Mathf.Max(512, _allLights.Count * 2);
+            if (_lightInfos.Length > optimalSize * 2)
+            {
+                System.Array.Resize(ref _lightInfos, optimalSize);
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo($"[LightCulling] Downsized array to {optimalSize}");
+            }
+            }
 
         private void UpdateLightCulling()
         {

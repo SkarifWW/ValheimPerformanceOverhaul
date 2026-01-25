@@ -14,7 +14,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         private readonly Dictionary<Vector2Int, BatchChunk> _chunks = new Dictionary<Vector2Int, BatchChunk>();
 
         // Setup via Plugin?
-        public bool BatchingEnabled => Plugin.PieceOptimizationEnabled.Value; // Should have its own config?
+        public bool BatchingEnabled => false; // Should have its own config?
 
         private void Awake()
         {

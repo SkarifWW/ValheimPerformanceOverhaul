@@ -51,7 +51,7 @@ namespace ValheimPerformanceOverhaul.Particles
         private float _updateTimer;
         private const float UPDATE_INTERVAL = 0.5f;
         private float _scanTimer;
-        private const float SCAN_INTERVAL = 10f;
+        private const float SCAN_INTERVAL = 30f;
 
         private float _cullDistance = 50f;
         private int _maxActiveParticles = 30;

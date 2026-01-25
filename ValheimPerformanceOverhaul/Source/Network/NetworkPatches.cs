@@ -104,6 +104,13 @@ namespace ValheimPerformanceOverhaul.Network
             return null;
         }
 
+        private static readonly HashSet<string> _skipCompressionTypes = new HashSet<string>
+{
+    "RPC_CharacterPosition", // Позиция игрока - каждый кадр
+    "RPC_HeartBeat",         // Heartbeat - каждую секунду
+    "RPC_Ping"               // Ping
+};
+
         // Патч для Steam Rate удален, если он вызывает проблемы, или можно оставить его безопасную версию.
         // Я оставлю базовую настройку, так как она полезна.
         [HarmonyPatch(typeof(ZSteamSocket), "RegisterGlobalCallbacks")]
