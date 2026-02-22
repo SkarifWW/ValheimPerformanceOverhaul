@@ -3,27 +3,25 @@ using UnityEngine;
 
 namespace ValheimPerformanceOverhaul
 {
+    // =========================================================================
+    // DistanceCuller больше НЕ имеет Update().
+    // Вся логика вызывается из DistanceCullerManager.Update() — одного цикла
+    // на все объекты. 300 блоков = 1 Update() вместо 300.
+    // =========================================================================
     public class DistanceCuller : MonoBehaviour
     {
         private readonly List<MonoBehaviour> _culledComponents = new List<MonoBehaviour>();
-
-        // ✅ КРИТИЧНО: Минимальное хранение данных о Rigidbody
         private readonly List<Rigidbody> _trackedRigidbodies = new List<Rigidbody>();
 
         private ZNetView _zNetView;
         private bool _isCulled = false;
-        public float CullDistance = 80f;
+        private bool _isCharacter = false;
+        private Transform _transform;
 
+        public float CullDistance = 80f;
         private float _cullDistanceSqr;
         private float _wakeUpDistanceSqr;
         private const float HYSTERESIS = 15f;
-        private const float CHECK_INTERVAL = 2.0f;
-        private float _checkTimer;
-
-        private Transform _transform;
-
-        // ✅ НОВОЕ: Флаг для определения типа объекта
-        private bool _isCharacter = false;
 
         private void Awake()
         {
@@ -36,7 +34,6 @@ namespace ValheimPerformanceOverhaul
                 return;
             }
 
-            // ✅ КРИТИЧНО: Определяем тип ОДИН раз
             _isCharacter = GetComponent<Character>() != null;
 
             try
@@ -46,13 +43,11 @@ namespace ValheimPerformanceOverhaul
 
                 CollectComponents();
 
-                // ✅ КРИТИЧНО: Собираем Rigidbody ТОЛЬКО для Piece
                 if (Plugin.CullPhysicsEnabled.Value && !_isCharacter)
-                {
                     CollectRigidbodies();
-                }
 
-                _checkTimer = Random.Range(0f, CHECK_INTERVAL);
+                // Регистрируемся в менеджере — он будет вызывать ManagerUpdate().
+                DistanceCullerManager.Instance?.RegisterCuller(this);
             }
             catch (System.Exception e)
             {
@@ -70,21 +65,14 @@ namespace ValheimPerformanceOverhaul
             foreach (var component in components)
             {
                 if (component == null) continue;
-
-                if (component == this ||
-                    component is ZNetView ||
-                    component is ZSyncTransform ||
-                    component is DistanceCuller ||
-                    component is Character ||
-                    component is Humanoid)
-                {
-                    continue;
-                }
-
-                if (Plugin.AiThrottlingEnabled.Value && component is BaseAI)
-                {
-                    continue;
-                }
+                if (component == this) continue;
+                if (component is ZNetView) continue;
+                if (component is ZSyncTransform) continue;
+                if (component is DistanceCuller) continue;
+                if (component is Character) continue;
+                if (component is Humanoid) continue;
+                if (Plugin.AiThrottlingEnabled.Value &&
+                    component is BaseAI) continue;
 
                 _culledComponents.Add(component);
             }
@@ -92,182 +80,114 @@ namespace ValheimPerformanceOverhaul
 
         private void CollectRigidbodies()
         {
-            var rigidbodies = GetComponentsInChildren<Rigidbody>(true);
-            if (rigidbodies == null) return;
+            var rbs = GetComponentsInChildren<Rigidbody>(true);
+            if (rbs == null) return;
 
-            foreach (var rb in rigidbodies)
-            {
+            foreach (var rb in rbs)
                 if (rb != null && !_trackedRigidbodies.Contains(rb))
-                {
                     _trackedRigidbodies.Add(rb);
-                }
-            }
 
             if (Plugin.DebugLoggingEnabled.Value)
-                Plugin.Log.LogInfo($"[DistanceCuller] Collected {_trackedRigidbodies.Count} Rigidbodies on {gameObject.name}");
+                Plugin.Log.LogInfo(
+                    $"[DistanceCuller] Collected {_trackedRigidbodies.Count} Rigidbodies on {gameObject.name}");
         }
 
-        private void Update()
+        // Вызывается из DistanceCullerManager — НЕ из Unity Update().
+        public void ManagerUpdate(IReadOnlyList<Player> players)
         {
-            // ✅ КРИТИЧНО: Проверяем существование менеджера
-            if (!Plugin.DistanceCullerEnabled.Value || DistanceCullerManager.Instance == null)
-            {
-                // Если функция выключена или менеджер не существует - отключаем компонент
-                enabled = false;
-                return;
-            }
-
-            _checkTimer += Time.deltaTime;
-            if (_checkTimer < CHECK_INTERVAL) return;
-            _checkTimer = 0f;
-
-            try
-            {
-                UpdateCullingState();
-            }
-            catch (System.Exception e)
-            {
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogError($"[DistanceCuller] Error in Update: {e.Message}");
-            }
-        }
-
-        private void UpdateCullingState()
-        {
-            var players = DistanceCullerManager.Players;
-
             if (players == null || players.Count == 0)
             {
-                if (_isCulled)
-                {
-                    SetComponentsEnabled(true);
-                }
+                if (_isCulled) SetComponentsEnabled(true);
                 return;
             }
 
-            float minDistanceSqr = GetMinPlayerDistanceSqr(players);
-            bool shouldBeCulled = DetermineCullingState(minDistanceSqr);
-            ApplyOwnershipLogic(shouldBeCulled);
+            float minDistSqr = GetMinPlayerDistanceSqr(players);
+            bool shouldCull = DetermineCullingState(minDistSqr);
+            ApplyOwnershipLogic(shouldCull);
         }
 
         private float GetMinPlayerDistanceSqr(IReadOnlyList<Player> players)
         {
-            float minDistanceSqr = float.MaxValue;
-            Vector3 myPosition = _transform.position;
+            float min = float.MaxValue;
+            Vector3 pos = _transform.position;
 
             for (int i = 0; i < players.Count; i++)
             {
-                var player = players[i];
-                if (player == null || player.transform == null) continue;
+                var p = players[i];
+                if (p == null || p.transform == null) continue;
 
-                float distSqr = (player.transform.position - myPosition).sqrMagnitude;
-                if (distSqr < minDistanceSqr)
-                {
-                    minDistanceSqr = distSqr;
-                }
+                float d = (p.transform.position - pos).sqrMagnitude;
+                if (d < min) min = d;
             }
-
-            return minDistanceSqr;
+            return min;
         }
 
-        private bool DetermineCullingState(float distanceSqr)
+        private bool DetermineCullingState(float distSqr)
         {
-            if (_isCulled)
-            {
-                return distanceSqr > _wakeUpDistanceSqr;
-            }
-            else
-            {
-                return distanceSqr > _cullDistanceSqr;
-            }
+            // Гистерезис: выходим из culled-состояния только когда игрок
+            // подошёл достаточно близко, чтобы не флипать туда-обратно на границе.
+            return _isCulled
+                ? distSqr > _wakeUpDistanceSqr
+                : distSqr > _cullDistanceSqr;
         }
 
-        private void ApplyOwnershipLogic(bool shouldBeCulled)
+        private void ApplyOwnershipLogic(bool shouldCull)
         {
             if (_zNetView == null) return;
 
             if (_zNetView.IsOwner())
             {
-                if (_isCulled != shouldBeCulled)
-                {
-                    SetComponentsEnabled(!shouldBeCulled);
-                }
+                if (_isCulled != shouldCull)
+                    SetComponentsEnabled(!shouldCull);
             }
             else
             {
+                // Не-владелец никогда не должен быть заспан нами —
+                // его состоянием управляет владелец.
                 if (_isCulled)
-                {
                     SetComponentsEnabled(true);
-                }
             }
         }
 
         private void SetComponentsEnabled(bool enabled)
         {
-            bool newStateIsCulled = !enabled;
-            if (_isCulled == newStateIsCulled) return;
+            if (_isCulled == !enabled) return;
+            _isCulled = !enabled;
 
-            _isCulled = newStateIsCulled;
-
-            // Компоненты
             for (int i = _culledComponents.Count - 1; i >= 0; i--)
             {
-                var component = _culledComponents[i];
+                var c = _culledComponents[i];
+                if (c == null) { _culledComponents.RemoveAt(i); continue; }
 
-                if (component == null)
+                if (c.enabled != enabled)
                 {
-                    _culledComponents.RemoveAt(i);
-                    continue;
-                }
-
-                if (component.enabled != enabled)
-                {
-                    try
-                    {
-                        component.enabled = enabled;
-                    }
+                    try { c.enabled = enabled; }
                     catch (System.Exception e)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set enabled on {component.GetType().Name}: {e.Message}");
+                            Plugin.Log.LogWarning(
+                                $"[DistanceCuller] Failed to set {c.GetType().Name}: {e.Message}");
                     }
                 }
             }
 
-            // ✅ КРИТИЧНО: Rigidbody обработка ТОЛЬКО для Piece
-            if (Plugin.CullPhysicsEnabled.Value && !_isCharacter && _trackedRigidbodies.Count > 0)
+            if (Plugin.CullPhysicsEnabled.Value && !_isCharacter)
             {
                 for (int i = _trackedRigidbodies.Count - 1; i >= 0; i--)
                 {
-                    Rigidbody rb = _trackedRigidbodies[i];
-
-                    if (rb == null)
-                    {
-                        _trackedRigidbodies.RemoveAt(i);
-                        continue;
-                    }
+                    var rb = _trackedRigidbodies[i];
+                    if (rb == null) { _trackedRigidbodies.RemoveAt(i); continue; }
 
                     try
                     {
-                        if (enabled)
-                        {
-                            // ✅ Просто включаем обратно
-                            // НЕ меняем kinematic - оставляем как было
-                            rb.WakeUp();
-                        }
-                        else
-                        {
-                            // ✅ КРИТИЧНО: ТОЛЬКО усыпляем, НЕ меняем kinematic
-                            if (!rb.isKinematic && !rb.IsSleeping())
-                            {
-                                rb.Sleep();
-                            }
-                        }
+                        if (enabled) rb.WakeUp();
+                        else if (!rb.isKinematic && !rb.IsSleeping()) rb.Sleep();
                     }
                     catch (System.Exception e)
                     {
                         if (Plugin.DebugLoggingEnabled.Value)
-                            Plugin.Log.LogWarning($"[DistanceCuller] Failed to set Rigidbody state: {e.Message}");
+                            Plugin.Log.LogWarning(
+                                $"[DistanceCuller] Rigidbody error: {e.Message}");
                     }
                 }
             }
@@ -277,19 +197,19 @@ namespace ValheimPerformanceOverhaul
         {
             try
             {
-                if (_isCulled)
-                {
-                    SetComponentsEnabled(true);
-                }
+                // Отписываемся от менеджера.
+                DistanceCullerManager.Instance?.UnregisterCuller(this);
 
-                // ✅ КРИТИЧНО: Полная очистка
+                if (_isCulled)
+                    SetComponentsEnabled(true);
+
                 _culledComponents.Clear();
                 _trackedRigidbodies.Clear();
             }
             catch (System.Exception e)
             {
                 if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogError($"[DistanceCuller] Error in OnDestroy: {e.Message}");
+                    Plugin.Log.LogError($"[DistanceCuller] OnDestroy error: {e.Message}");
             }
         }
     }

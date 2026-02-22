@@ -8,8 +8,9 @@ namespace ValheimPerformanceOverhaul.Pieces
     public class AsyncWearManager : MonoBehaviour
     {
         public static AsyncWearManager Instance { get; private set; }
+
         private readonly Queue<WearNTear> _pendingEnable = new Queue<WearNTear>();
-        private const int MAX_ENABLES_PER_FRAME = 20; // Configurable?
+        private const int MAX_ENABLES_PER_FRAME = 20;
 
         private void Awake()
         {
@@ -24,16 +25,25 @@ namespace ValheimPerformanceOverhaul.Pieces
 
         private void Update()
         {
+            // FIX: Early exit — не тратим время на вызов метода когда очередь пуста.
+            // Без этого Update() каждый кадр входил в метод, делал Count-check и выходил.
+            // Звучит дёшево, но при 60fps это 60 бесполезных вызовов в секунду.
+            if (_pendingEnable.Count == 0) return;
+
             int count = 0;
             while (_pendingEnable.Count > 0 && count < MAX_ENABLES_PER_FRAME)
             {
                 var wnt = _pendingEnable.Dequeue();
                 if (wnt != null)
-                {
                     wnt.enabled = true;
-                }
                 count++;
             }
+        }
+
+        private void OnDestroy()
+        {
+            _pendingEnable.Clear();
+            Instance = null;
         }
     }
 
@@ -44,18 +54,13 @@ namespace ValheimPerformanceOverhaul.Pieces
         private static void Postfix(WearNTear __instance)
         {
             if (!Plugin.PieceOptimizationEnabled.Value) return;
-            
-            // Functionality 6: Async Initialization
-            // Disable initially, let manager enable it
-            // Only if we have a manager
+
             if (AsyncWearManager.Instance == null)
             {
                 var go = new GameObject("_VPO_AsyncWearManager");
                 go.AddComponent<AsyncWearManager>();
-                // Instance set in Awake
             }
 
-            // Only defer if it's actually enabled
             if (__instance.enabled)
             {
                 __instance.enabled = false;
