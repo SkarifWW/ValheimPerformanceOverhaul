@@ -12,8 +12,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (!Plugin.PieceOptimizationEnabled.Value) return;
 
-            // ✅ FIX: Пропускаем ghost объекты (проекции при строительстве)
-            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
+                        if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
             {
                 return;
             }
@@ -28,8 +27,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (piece == null) return;
 
-            // SAFETY: Do not optimize if it has components that imply dynamic behavior
-            if (piece.GetComponent<ZSyncTransform>() != null ||
+                        if (piece.GetComponent<ZSyncTransform>() != null ||
                 piece.GetComponent<Character>() != null ||
                 piece.GetComponent<BaseAI>() != null)
             {
@@ -38,8 +36,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                 return;
             }
 
-            // Exclusion list from config
-            string cleanName = piece.name.Replace("(Clone)", "");
+                        string cleanName = piece.name.Replace("(Clone)", "");
             if (Plugin.CullerExclusions.Value.Contains(cleanName))
             {
                 if (Plugin.DebugLoggingEnabled.Value)
@@ -52,30 +49,26 @@ namespace ValheimPerformanceOverhaul.Pieces
 
             try
             {
-                // ✅ КРИТИЧНО: Обработка Rigidbody
-                var rigidbodies = go.GetComponentsInChildren<Rigidbody>(true);
+                                var rigidbodies = go.GetComponentsInChildren<Rigidbody>(true);
                 foreach (var rb in rigidbodies)
                 {
                     if (rb != null)
                     {
-                        // ✅ ИСПРАВЛЕНО: Обнуляем velocity ПЕРЕД установкой kinematic
-                        if (!rb.isKinematic)
+                                                if (!rb.isKinematic)
                         {
                             rb.linearVelocity = Vector3.zero;
                             rb.angularVelocity = Vector3.zero;
                             rb.Sleep();
                         }
 
-                        // Теперь безопасно делать kinematic
-                        rb.isKinematic = true;
+                                                rb.isKinematic = true;
 
                         if (Plugin.DebugLoggingEnabled.Value)
                             Plugin.Log.LogInfo($"[DecorOptimizer] Made Rigidbody kinematic on {piece.name} (child: {rb.gameObject.name})");
                     }
                 }
 
-                // Примечание: Коллайдеры НЕ отключаем - DistanceCuller управляет ими по дистанции
-            }
+                            }
             catch (System.Exception e)
             {
                 if (Plugin.DebugLoggingEnabled.Value)

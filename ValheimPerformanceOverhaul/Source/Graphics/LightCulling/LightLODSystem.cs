@@ -233,15 +233,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         }
     }
 
-    // =========================================================================
-    // LightLODManager — FIX: ScanForLights() removed from Start().
-    //
-    // Причина: LightLODPatches.RegisterNewLights() реактивно вызывает
-    // RegisterLight() при каждом ZNetScene.CreateObject, поэтому
-    // повторное сканирование сцены в Start() создавало дубликаты в _allLights.
-    // При старте игры сцена ещё пустая, так что скан был и бесполезен.
-    // =========================================================================
-    public class LightLODManager : MonoBehaviour
+                                    public class LightLODManager : MonoBehaviour
     {
         public static LightLODManager Instance { get; private set; }
 
@@ -265,10 +257,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         private void Start()
         {
             LoadConfig();
-            // FIX: ScanForLights() call removed.
-            // Lights are registered reactively via LightLODPatches.RegisterNewLights()
-            // which hooks ZNetScene.CreateObject — no duplicate entries, no FPS spike on load.
-            Plugin.Log.LogInfo("[LightLOD] Manager initialized. Reactive registration active.");
+                                                Plugin.Log.LogInfo("[LightLOD] Manager initialized. Reactive registration active.");
         }
 
         private void LoadConfig()
@@ -279,11 +268,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
             _billboardDistance = Plugin.LightLODBillboardDistance?.Value ?? 100f;
         }
 
-        /// <summary>
-        /// Called by LightLODPatches on every ZNetScene.CreateObject.
-        /// Adds a LightLOD component if not already present and tracks it.
-        /// </summary>
-        public void RegisterLight(Light light)
+                                        public void RegisterLight(Light light)
         {
             if (light == null || light.type == LightType.Directional) return;
 

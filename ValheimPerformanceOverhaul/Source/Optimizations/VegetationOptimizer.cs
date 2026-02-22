@@ -6,8 +6,7 @@ namespace ValheimPerformanceOverhaul.Vegetation
     [HarmonyPatch]
     public static class VegetationPatches
     {
-        // ПАТЧ 1: Уменьшаем дальность отрисовки травы
-        [HarmonyPatch(typeof(ClutterSystem), "Awake")]
+                [HarmonyPatch(typeof(ClutterSystem), "Awake")]
         [HarmonyPostfix]
         private static void ReduceGrassDistance(ClutterSystem __instance)
         {
@@ -15,9 +14,7 @@ namespace ValheimPerformanceOverhaul.Vegetation
 
             try
             {
-                // Оригинал: 80м для травы
-                // Оптимизация: 40-60м (настраивается)
-                float distance = Plugin.GrassRenderDistance.Value;
+                                                float distance = Plugin.GrassRenderDistance.Value;
 
                 var clutterDistance = AccessTools.Field(typeof(ClutterSystem), "m_distance");
                 if (clutterDistance != null)
@@ -36,8 +33,7 @@ namespace ValheimPerformanceOverhaul.Vegetation
             }
         }
 
-        // ПАТЧ 2: Снижаем плотность травы
-        [HarmonyPatch(typeof(ClutterSystem), "Awake")]
+                [HarmonyPatch(typeof(ClutterSystem), "Awake")]
         [HarmonyPostfix]
         private static void ReduceGrassDensity(ClutterSystem __instance)
         {
@@ -45,11 +41,9 @@ namespace ValheimPerformanceOverhaul.Vegetation
 
             try
             {
-                // Множитель плотности: 1.0 = vanilla, 0.5 = половина травы
-                float densityMultiplier = Plugin.GrassDensityMultiplier.Value;
+                                float densityMultiplier = Plugin.GrassDensityMultiplier.Value;
 
-                // Получаем список всех clutter объектов
-                var clutters = AccessTools.Field(typeof(ClutterSystem), "m_clutter");
+                                var clutters = AccessTools.Field(typeof(ClutterSystem), "m_clutter");
                 if (clutters != null)
                 {
                     var clutterList = clutters.GetValue(__instance) as System.Collections.IList;
@@ -57,8 +51,7 @@ namespace ValheimPerformanceOverhaul.Vegetation
                     {
                         foreach (var clutter in clutterList)
                         {
-                            // Уменьшаем amount для каждого типа травы
-                            var amountField = AccessTools.Field(clutter.GetType(), "m_amount");
+                                                        var amountField = AccessTools.Field(clutter.GetType(), "m_amount");
                             if (amountField != null)
                             {
                                 int originalAmount = (int)amountField.GetValue(clutter);
@@ -80,8 +73,7 @@ namespace ValheimPerformanceOverhaul.Vegetation
             }
         }
 
-        // ПАТЧ 3: Оптимизация дальности деталей местности
-        [HarmonyPatch(typeof(Heightmap), "Awake")]
+                [HarmonyPatch(typeof(Heightmap), "Awake")]
         [HarmonyPostfix]
         private static void OptimizeTerrainDetails(Heightmap __instance)
         {
@@ -92,12 +84,10 @@ namespace ValheimPerformanceOverhaul.Vegetation
                 var terrain = __instance.GetComponent<Terrain>();
                 if (terrain != null)
                 {
-                    // Уменьшаем дальность отрисовки деталей (камней, палок, etc)
-                    terrain.detailObjectDistance = Plugin.DetailObjectDistance.Value;
+                                        terrain.detailObjectDistance = Plugin.DetailObjectDistance.Value;
                     terrain.detailObjectDensity = Plugin.DetailDensity.Value;
 
-                    // Снижаем качество тесселяции
-                    terrain.heightmapMaximumLOD = Plugin.TerrainMaxLOD.Value;
+                                        terrain.heightmapMaximumLOD = Plugin.TerrainMaxLOD.Value;
 
                     if (Plugin.DebugLoggingEnabled.Value)
                     {

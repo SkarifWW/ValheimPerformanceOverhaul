@@ -24,8 +24,7 @@ namespace ValheimPerformanceOverhaul.Pieces
             }
         }
 
-        // Patching HaveRoof to return true stops rain wear logic in UpdateWear
-        [HarmonyPatch(typeof(WearNTear), "HaveRoof")]
+                [HarmonyPatch(typeof(WearNTear), "HaveRoof")]
         [HarmonyPostfix]
         private static void HaveRoof_Postfix(ref bool __result)
         {
@@ -35,8 +34,7 @@ namespace ValheimPerformanceOverhaul.Pieces
             }
         }
 
-        // Patching IsUnderWater to return false stops water wear logic in UpdateWear
-        [HarmonyPatch(typeof(WearNTear), "IsUnderWater")]
+                [HarmonyPatch(typeof(WearNTear), "IsUnderWater")]
         [HarmonyPostfix]
         private static void IsUnderWater_Postfix(ref bool __result)
         {

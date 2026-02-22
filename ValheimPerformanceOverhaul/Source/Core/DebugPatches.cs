@@ -7,8 +7,7 @@ namespace ValheimPerformanceOverhaul.Core
     [HarmonyPatch]
     public static class RigidbodyDebugPatches
     {
-        // 1. Patch for set_velocity (Old API, but still used)
-        [HarmonyPatch(typeof(Rigidbody), "velocity", MethodType.Setter)]
+                [HarmonyPatch(typeof(Rigidbody), "velocity", MethodType.Setter)]
         [HarmonyPrefix]
         private static bool Prefix_SetVelocity(Rigidbody __instance, Vector3 value)
         {
@@ -19,13 +18,10 @@ namespace ValheimPerformanceOverhaul.Core
                 Plugin.Log.LogWarning($"[RigidbodyDebug] Attempted to set velocity {value} on KINEMATIC Rigidbody {__instance.name}. StackTrace:\n{Environment.StackTrace}");
             }
 
-            // Optional: Suppress the warning by skipping the native call
-            // return false; 
-            return true;
+                                    return true;
         }
 
-        // 2. Patch for set_angularVelocity
-        [HarmonyPatch(typeof(Rigidbody), "angularVelocity", MethodType.Setter)]
+                [HarmonyPatch(typeof(Rigidbody), "angularVelocity", MethodType.Setter)]
         [HarmonyPrefix]
         private static bool Prefix_SetAngularVelocity(Rigidbody __instance, Vector3 value)
         {
@@ -39,9 +35,7 @@ namespace ValheimPerformanceOverhaul.Core
             return true;
         }
 
-        // 3. Patch for new Unity 2022.3 API: linearVelocity
-        // We use string match here because it might not exist in all Unity versions (though it should in Valheim now)
-        [HarmonyPatch(typeof(Rigidbody), "linearVelocity", MethodType.Setter)]
+                        [HarmonyPatch(typeof(Rigidbody), "linearVelocity", MethodType.Setter)]
         [HarmonyPrefix]
         private static bool Prefix_SetLinearVelocity(Rigidbody __instance, Vector3 value)
         {
@@ -55,8 +49,7 @@ namespace ValheimPerformanceOverhaul.Core
             return true;
         }
 
-        // 4. Catch the Unity warning directly from the logger
-        [HarmonyPatch(typeof(Debug), "LogWarning", new Type[] { typeof(object) })]
+                [HarmonyPatch(typeof(Debug), "LogWarning", new Type[] { typeof(object) })]
         [HarmonyPrefix]
         private static void Prefix_CatchUnityWarning(object message)
         {

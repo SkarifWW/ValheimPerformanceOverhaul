@@ -7,11 +7,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 {
     public static class PiecePatches
     {
-        // FIX: ConcurrentDictionary → Dictionary.
-        // Все вызовы Piece.IsPlacedByPlayer и Piece.GetCreator идут из main thread —
-        // thread-safety не нужна. ConcurrentDictionary использует lock на каждую операцию
-        // и в 3-5 раз медленнее обычного Dictionary в single-thread сценарии.
-        private static readonly Dictionary<Piece, bool> _placedByPlayerCache =
+                                        private static readonly Dictionary<Piece, bool> _placedByPlayerCache =
             new Dictionary<Piece, bool>();
 
         private static readonly Dictionary<Piece, long> _creatorCache =
@@ -56,8 +52,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (!Plugin.PieceOptimizationEnabled.Value) return;
 
-            // TryAdd equivalent: only write if key not yet present.
-            if (!_placedByPlayerCache.ContainsKey(__instance))
+                        if (!_placedByPlayerCache.ContainsKey(__instance))
                 _placedByPlayerCache[__instance] = __result;
         }
 

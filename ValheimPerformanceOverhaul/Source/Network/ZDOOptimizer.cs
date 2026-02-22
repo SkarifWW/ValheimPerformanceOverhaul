@@ -9,23 +9,16 @@ namespace ValheimPerformanceOverhaul.Network
     public static class ZDOOptimizationPatches
     {
         private static readonly Dictionary<ZDO, float> _lastSyncTime = new Dictionary<ZDO, float>();
-        private static readonly List<ZDO> _reusableRemoveList = new List<ZDO>(128); // ✅ Reusable
-        private static float _syncInterval = 2.0f;
+        private static readonly List<ZDO> _reusableRemoveList = new List<ZDO>(128);         private static float _syncInterval = 2.0f;
 
-        // ✅ НОВОЕ: Кэш для определения типа ZDO
-        private static readonly Dictionary<int, ZDOType> _prefabTypeCache = new Dictionary<int, ZDOType>();
+                private static readonly Dictionary<int, ZDOType> _prefabTypeCache = new Dictionary<int, ZDOType>();
 
         private enum ZDOType
         {
             Unknown,
-            Piece,      // Постройка
-            Character,  // Моб/игрок
-            Item,       // Предмет
-            Other       // Остальное
-        }
+            Piece,                  Character,              Item,                   Other               }
 
-        // ПАТЧ 1: Throttling ZDO синхронизации для статичных объектов
-        [HarmonyPatch(typeof(ZDOMan), "CreateSyncList")]
+                [HarmonyPatch(typeof(ZDOMan), "CreateSyncList")]
         [HarmonyPrefix]
         private static void ThrottleStaticZDOs(ZDOMan __instance, List<ZDO> ___m_tempToSync)
         {
@@ -36,27 +29,21 @@ namespace ValheimPerformanceOverhaul.Network
             if (___m_tempToSync == null) return;
 
             float currentTime = Time.time;
-            _reusableRemoveList.Clear(); // ✅ Используем reusable list
-
+            _reusableRemoveList.Clear(); 
             foreach (var zdo in ___m_tempToSync)
             {
                 if (zdo == null) continue;
 
-                // ✅ ИСПРАВЛЕНО: Проверяем, является ли объект статичным
-                if (IsStaticZDO(zdo))
+                                if (IsStaticZDO(zdo))
                 {
-                    // Динамический интервал в зависимости от дистанции
-                    float interval = _syncInterval;
+                                        float interval = _syncInterval;
 
                     if (Player.m_localPlayer != null)
                     {
                         float dist = Vector3.Distance(zdo.GetPosition(), Player.m_localPlayer.transform.position);
-                        if (dist > 60f) interval *= 2f;  // 4 секунды
-                        if (dist > 120f) interval *= 4f; // 8 секунд
-                    }
+                        if (dist > 60f) interval *= 2f;                          if (dist > 120f) interval *= 4f;                     }
 
-                    // Проверяем, когда последний раз синхронизировали
-                    if (_lastSyncTime.TryGetValue(zdo, out float lastSync))
+                                        if (_lastSyncTime.TryGetValue(zdo, out float lastSync))
                     {
                         if (currentTime - lastSync < interval)
                         {
@@ -69,8 +56,7 @@ namespace ValheimPerformanceOverhaul.Network
                 }
             }
 
-            // Удаляем из списка синхронизации
-            foreach (var zdo in _reusableRemoveList)
+                        foreach (var zdo in _reusableRemoveList)
             {
                 ___m_tempToSync.Remove(zdo);
             }
@@ -81,21 +67,18 @@ namespace ValheimPerformanceOverhaul.Network
             }
         }
 
-        // ✅ ИСПРАВЛЕНО: Корректное определение типа ZDO
-        private static bool IsStaticZDO(ZDO zdo)
+                private static bool IsStaticZDO(ZDO zdo)
         {
             if (zdo == null) return false;
 
             int prefabHash = zdo.GetPrefab();
 
-            // ✅ Проверяем кэш
-            if (_prefabTypeCache.TryGetValue(prefabHash, out ZDOType cachedType))
+                        if (_prefabTypeCache.TryGetValue(prefabHash, out ZDOType cachedType))
             {
                 return cachedType == ZDOType.Piece;
             }
 
-            // ✅ Определяем тип через префаб
-            ZDOType type = DetermineZDOType(prefabHash);
+                        ZDOType type = DetermineZDOType(prefabHash);
             _prefabTypeCache[prefabHash] = type;
 
             return type == ZDOType.Piece;
@@ -108,58 +91,46 @@ namespace ValheimPerformanceOverhaul.Network
             GameObject prefab = ZNetScene.instance.GetPrefab(prefabHash);
             if (prefab == null) return ZDOType.Unknown;
 
-            // ✅ КРИТИЧНО: Проверяем компоненты в правильном порядке
-
-            // 1. Постройки (статичные)
-            if (prefab.GetComponent<Piece>() != null)
+            
+                        if (prefab.GetComponent<Piece>() != null)
             {
                 return ZDOType.Piece;
             }
 
-            // 2. Персонажи (динамичные)
-            if (prefab.GetComponent<Character>() != null)
+                        if (prefab.GetComponent<Character>() != null)
             {
                 return ZDOType.Character;
             }
 
-            // 3. Предметы (могут быть статичными или динамичными)
-            if (prefab.GetComponent<ItemDrop>() != null)
+                        if (prefab.GetComponent<ItemDrop>() != null)
             {
                 return ZDOType.Item;
             }
 
-            // 4. Всё остальное
-            return ZDOType.Other;
+                        return ZDOType.Other;
         }
 
-        // ✅ НОВОЕ: Дополнительная проверка для предметов
-        private static bool IsItemStatic(ZDO zdo)
+                private static bool IsItemStatic(ZDO zdo)
         {
-            // Предмет статичен если:
-            // 1. Нет velocity
-            if (zdo.GetVec3("velocity", Vector3.zero) != Vector3.zero)
+                                    if (zdo.GetVec3("velocity", Vector3.zero) != Vector3.zero)
                 return false;
 
-            // 2. Лежит на земле (не в контейнере)
-            if (zdo.GetInt("inContainer", 0) != 0)
+                        if (zdo.GetInt("inContainer", 0) != 0)
                 return false;
 
-            // 3. Не подбирается игроком
-            if (zdo.GetLong("pickedUp", 0L) != 0L)
+                        if (zdo.GetLong("pickedUp", 0L) != 0L)
                 return false;
 
             return true;
         }
 
-        // ПАТЧ 2: Очистка кэша
-        [HarmonyPatch(typeof(ZDOMan), "Update")]
+                [HarmonyPatch(typeof(ZDOMan), "Update")]
         [HarmonyPostfix]
         private static void CleanupCache()
         {
             if (!Plugin.ZDOOptimizationEnabled.Value) return;
 
-            // Очищаем кэш раз в минуту
-            if (Time.frameCount % 3600 == 0)
+                        if (Time.frameCount % 3600 == 0)
             {
                 _reusableRemoveList.Clear();
                 float currentTime = Time.time;
@@ -177,8 +148,7 @@ namespace ValheimPerformanceOverhaul.Network
                     _lastSyncTime.Remove(zdo);
                 }
 
-                // ✅ НОВОЕ: Периодическая очистка кэша типов
-                if (_prefabTypeCache.Count > 1000)
+                                if (_prefabTypeCache.Count > 1000)
                 {
                     Plugin.Log.LogWarning($"[ZDO] Prefab cache large ({_prefabTypeCache.Count}), consider clearing");
                 }
@@ -190,8 +160,7 @@ namespace ValheimPerformanceOverhaul.Network
             }
         }
 
-        // ✅ НОВОЕ: Очистка при смене мира
-        [HarmonyPatch(typeof(ZNet), "Shutdown")]
+                [HarmonyPatch(typeof(ZNet), "Shutdown")]
         [HarmonyPostfix]
         private static void ClearCacheOnShutdown()
         {
@@ -203,15 +172,13 @@ namespace ValheimPerformanceOverhaul.Network
                 Plugin.Log.LogInfo("[ZDO] Cleared all caches on shutdown");
         }
 
-        // ✅ НОВОЕ: Логирование статистики
-        [HarmonyPatch(typeof(ZDOMan), "Update")]
+                [HarmonyPatch(typeof(ZDOMan), "Update")]
         [HarmonyPostfix]
         private static void LogStats()
         {
             if (!Plugin.DebugLoggingEnabled.Value || !Plugin.ZDOOptimizationEnabled.Value) return;
 
-            // Каждые 5 минут
-            if (Time.frameCount % 18000 == 0)
+                        if (Time.frameCount % 18000 == 0)
             {
                 Plugin.Log.LogInfo($"[ZDO] Stats - Sync cache: {_lastSyncTime.Count}, Type cache: {_prefabTypeCache.Count}");
             }

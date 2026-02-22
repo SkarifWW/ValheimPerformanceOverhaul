@@ -12,8 +12,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         private const float UPDATE_INTERVAL = 5.0f;
         private float _updateTimer;
 
-        // Configuration
-        public float SleepDistance => Plugin.PieceUpdateSkipDistance.Value;
+                public float SleepDistance => Plugin.PieceUpdateSkipDistance.Value;
         public bool DisableColliders = false;
 
         private class PieceContext
@@ -48,8 +47,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                 LastInteractionTime = Time.time
             };
 
-            // Only track if it has components we want to optimize
-            if (context.WearNTear != null || context.NetView != null || context.Colliders.Length > 0)
+                        if (context.WearNTear != null || context.NetView != null || context.Colliders.Length > 0)
             {
                 _trackedPieces.Add(context);
             }
@@ -57,9 +55,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
         public void UnregisterPiece(Piece piece)
         {
-            // Linear removal might be slow for massive bases. 
-            // TODO: Optimize if needed (Dictionary mapping).
-            for (int i = _trackedPieces.Count - 1; i >= 0; i--)
+                                    for (int i = _trackedPieces.Count - 1; i >= 0; i--)
             {
                 if (_trackedPieces[i].Piece == piece)
                 {
@@ -71,9 +67,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
         public void WakeUp(Piece piece)
         {
-             // Helper to force wake up a piece
-             // Find context and set IsSleeping = false;
-        }
+                                  }
 
         private void Update()
         {
@@ -86,10 +80,7 @@ namespace ValheimPerformanceOverhaul.Pieces
             Vector3 playerPos = Player.m_localPlayer.transform.position;
             float sleepDistSqr = SleepDistance * SleepDistance;
 
-            // Process a chunk of pieces per frame? 
-            // For now, process all every 5 seconds (existing plan).
-            // Optimization: split processing over frames if list is huge.
-            
+                                                
             for (int i = _trackedPieces.Count - 1; i >= 0; i--)
             {
                 var ctx = _trackedPieces[i];
@@ -117,19 +108,13 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             ctx.IsSleeping = sleep;
             
-            // Logic for Sleeping
-            if (ctx.WearNTear != null)
+                        if (ctx.WearNTear != null)
             {
                 ctx.WearNTear.enabled = !sleep; 
             }
 
-            // ZNetView throttling is handled separately usually, 
-            // but we can disable local update if ZNetView has one.
-            // Generally ZNetView doesn't have an Update() method that is heavy, 
-            // it's the syncing.
-            
-            // Colliders
-            if (DisableColliders && ctx.Colliders != null)
+                                                            
+                        if (DisableColliders && ctx.Colliders != null)
             {
                foreach(var col in ctx.Colliders)
                {

@@ -2,15 +2,12 @@
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
-using ValheimPerformanceOverhaul.Network; // Подключаем пространство имен с менеджером
-
+using ValheimPerformanceOverhaul.Network; 
 namespace ValheimPerformanceOverhaul.Network
 {
-    // Буферы вынесены в отдельный статический класс
-    public static class NetworkBuffers
+        public static class NetworkBuffers
     {
-        // Переиспользуемая очередь для сжатия пакетов, чтобы не создавать new Queue каждый раз
-        public static readonly Queue<byte[]> SendQueueCache = new Queue<byte[]>(128);
+                public static readonly Queue<byte[]> SendQueueCache = new Queue<byte[]>(128);
     }
 
     [HarmonyPatch]
@@ -51,24 +48,21 @@ namespace ValheimPerformanceOverhaul.Network
             if (!Plugin.NetworkThrottlingEnabled.Value || !Plugin.NetworkCompressionEnabled.Value) return;
             if (___m_sendQueue == null || ___m_sendQueue.Count == 0) return;
 
-            // Проверяем пира
-            var peer = GetPeerFromSocket(__instance);
+                        var peer = GetPeerFromSocket(__instance);
             if (peer == null || !CompressionStatus.IsCompressionEnabled(peer.m_rpc)) return;
 
             lock (NetworkBuffers.SendQueueCache)
             {
                 NetworkBuffers.SendQueueCache.Clear();
 
-                // Извлекаем и сжимаем
-                while (___m_sendQueue.Count > 0)
+                                while (___m_sendQueue.Count > 0)
                 {
                     byte[] raw = ___m_sendQueue.Dequeue();
                     byte[] compressed = CompressorManager.Compress(raw);
                     NetworkBuffers.SendQueueCache.Enqueue(compressed);
                 }
 
-                // Возвращаем в оригинальную очередь
-                foreach (var packet in NetworkBuffers.SendQueueCache)
+                                foreach (var packet in NetworkBuffers.SendQueueCache)
                 {
                     ___m_sendQueue.Enqueue(packet);
                 }
@@ -84,20 +78,16 @@ namespace ValheimPerformanceOverhaul.Network
             if (!Plugin.NetworkThrottlingEnabled.Value || __result == null) return;
 
             byte[] data = __result.GetArray();
-            // Простая проверка "магии" Zstd (первые байты), чтобы не пытаться разжать несжатое
-            if (data == null || data.Length < 4) return;
+                        if (data == null || data.Length < 4) return;
 
-            // Если это не наш пакет - декомпрессор вернет оригинал
-            byte[] decompressed = CompressorManager.Decompress(data);
+                        byte[] decompressed = CompressorManager.Decompress(data);
 
-            if (decompressed != data) // Если была декомпрессия
-            {
+            if (decompressed != data)             {
                 __result = new ZPackage(decompressed);
             }
         }
 
-        // Вспомогательный метод
-        private static ZNetPeer GetPeerFromSocket(ISocket socket)
+                private static ZNetPeer GetPeerFromSocket(ISocket socket)
         {
             if (ZNet.instance == null) return null;
             foreach (var p in ZNet.instance.GetPeers())
@@ -107,20 +97,14 @@ namespace ValheimPerformanceOverhaul.Network
 
         private static readonly HashSet<string> _skipCompressionTypes = new HashSet<string>
 {
-    "RPC_CharacterPosition", // Позиция игрока - каждый кадр
-    "RPC_HeartBeat",         // Heartbeat - каждую секунду
-    "RPC_Ping"               // Ping
-};
+    "RPC_CharacterPosition",     "RPC_HeartBeat",             "RPC_Ping"               };
 
-        // Патч для Steam Rate удален, если он вызывает проблемы, или можно оставить его безопасную версию.
-        // Я оставлю базовую настройку, так как она полезна.
-        [HarmonyPatch(typeof(ZSteamSocket), "RegisterGlobalCallbacks")]
+                        [HarmonyPatch(typeof(ZSteamSocket), "RegisterGlobalCallbacks")]
         [HarmonyPostfix]
         private static void ApplySteamSettings()
         {
             if (!Plugin.NetworkThrottlingEnabled.Value) return;
-            // Тут код SteamworksPatcher из вашего исходника, но обернутый в try-catch
-        }
+                    }
     }
 }
 */

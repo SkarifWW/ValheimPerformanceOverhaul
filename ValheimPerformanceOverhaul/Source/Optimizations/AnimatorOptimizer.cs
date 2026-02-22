@@ -33,8 +33,7 @@ namespace ValheimPerformanceOverhaul
 
         private const float CHECK_INTERVAL = 1.0f;
         private const float CULL_DIST_SQR = 60f * 60f;
-        private const float FAR_CULL_DIST_SQR = 100f * 100f; // Новая дистанция для полного отключения
-
+        private const float FAR_CULL_DIST_SQR = 100f * 100f; 
         private bool _isFullyCulled = false;
         private bool _isPartiallyCulled = false;
 
@@ -72,14 +71,11 @@ namespace ValheimPerformanceOverhaul
 
             float distSqr = (_character.transform.position - Player.m_localPlayer.transform.position).sqrMagnitude;
 
-            // ✅ ИСПРАВЛЕНО: Теперь 3 уровня оптимизации
-            if (distSqr > FAR_CULL_DIST_SQR)
+                        if (distSqr > FAR_CULL_DIST_SQR)
             {
-                // Очень далеко (>100м): ПОЛНОЕ отключение Animator
-                if (!_isFullyCulled)
+                                if (!_isFullyCulled)
                 {
-                    _animator.enabled = false; // ✅ Полностью выключаем компонент
-                    _isFullyCulled = true;
+                    _animator.enabled = false;                     _isFullyCulled = true;
                     _isPartiallyCulled = false;
 
                     if (Plugin.DebugLoggingEnabled.Value)
@@ -88,12 +84,9 @@ namespace ValheimPerformanceOverhaul
             }
             else if (distSqr > CULL_DIST_SQR)
             {
-                // Далеко (60-100м): CullCompletely (не обновляет анимацию вообще)
-                if (!_isPartiallyCulled || _isFullyCulled)
+                                if (!_isPartiallyCulled || _isFullyCulled)
                 {
-                    _animator.enabled = true; // Включаем обратно
-                    _animator.cullingMode = AnimatorCullingMode.CullCompletely; // ✅ Полное отключение анимации
-                    _isPartiallyCulled = true;
+                    _animator.enabled = true;                     _animator.cullingMode = AnimatorCullingMode.CullCompletely;                     _isPartiallyCulled = true;
                     _isFullyCulled = false;
 
                     if (Plugin.DebugLoggingEnabled.Value)
@@ -102,8 +95,7 @@ namespace ValheimPerformanceOverhaul
             }
             else
             {
-                // Близко (<60м): Полная анимация
-                if (_isPartiallyCulled || _isFullyCulled)
+                                if (_isPartiallyCulled || _isFullyCulled)
                 {
                     _animator.enabled = true;
                     _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
@@ -118,8 +110,7 @@ namespace ValheimPerformanceOverhaul
 
         private void OnDestroy()
         {
-            // Восстанавливаем состояние при уничтожении
-            if (_animator != null)
+                        if (_animator != null)
             {
                 _animator.enabled = true;
                 _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;

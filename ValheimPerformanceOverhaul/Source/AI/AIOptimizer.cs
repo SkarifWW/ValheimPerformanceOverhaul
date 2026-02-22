@@ -14,30 +14,25 @@ namespace ValheimPerformanceOverhaul.AI
         private const float DIST_CHECK_INTERVAL = 1.0f;
         private float _closestPlayerDistSqr = 1000000f;
 
-        // Caching State
-        private Character _cachedEnemy;
+                private Character _cachedEnemy;
         private float _lastEnemyCheck;
 
         private float _lastAttackCheck;
         
-        // Pathfinding cache
-        private float _lastPathUpdate;
+                private float _lastPathUpdate;
         private Vector3 _lastPathTargetPos;
 
         private readonly Dictionary<int, (bool visible, float time)> _losCache = new Dictionary<int, (bool, float)>();
 
-        // ✅ КРИТИЧНО: Лимиты для предотвращения утечки памяти
-        private const int MAX_LOS_CACHE_SIZE = 100;
+                private const int MAX_LOS_CACHE_SIZE = 100;
         private const float LOS_CACHE_TIMEOUT = 5f;
         private float _losCleanupTimer = 0f;
 
-        // === МОДУЛЬ 5: Physics Sleep ===
-        private Rigidbody _rigidbody;
+                private Rigidbody _rigidbody;
         private Collider[] _colliders;
         private bool _physicsActive = true;
 
-        // === МОДУЛЬ 7: Animator Optimization ===
-        private Animator _animator;
+                private Animator _animator;
         private bool _animatorActive = true;
         private float _originalAnimatorSpeed = 1f;
 
@@ -47,8 +42,7 @@ namespace ValheimPerformanceOverhaul.AI
             _nview = GetComponent<ZNetView>();
             _character = GetComponent<Character>();
             
-            // Получаем компоненты для оптимизации
-            _rigidbody = GetComponent<Rigidbody>();
+                        _rigidbody = GetComponent<Rigidbody>();
             _colliders = GetComponentsInChildren<Collider>();
             _animator = GetComponentInChildren<Animator>();
             
@@ -60,10 +54,7 @@ namespace ValheimPerformanceOverhaul.AI
 
         private void OnEnable()
         {
-            // ✅ КРИТИЧНО: Сброс состояния при взятии из пула
-            _closestPlayerDistSqr = 0f; // Считаем что игрок рядом пока не доказано обратное
-            _distCheckTimer = DIST_CHECK_INTERVAL; // Force update next frame
-            
+                        _closestPlayerDistSqr = 0f;             _distCheckTimer = DIST_CHECK_INTERVAL;             
             _cachedEnemy = null;
             _lastEnemyCheck = -100f;
             _lastAttackCheck = -100f;
@@ -101,10 +92,8 @@ namespace ValheimPerformanceOverhaul.AI
             UpdateClosestPlayerDistance();
             UpdatePhysicsAndAnimator();
 
-            // ✅ КРИТИЧНО: Очистка LOS кэша для предотвращения утечки памяти
-            _losCleanupTimer += DIST_CHECK_INTERVAL;
-            if (_losCleanupTimer >= 10f) // Каждые 10 секунд
-            {
+                        _losCleanupTimer += DIST_CHECK_INTERVAL;
+            if (_losCleanupTimer >= 10f)             {
                 _losCleanupTimer = 0f;
                 CleanupLOSCache();
             }
@@ -114,14 +103,12 @@ namespace ValheimPerformanceOverhaul.AI
         {
             _closestPlayerDistSqr = 1000000f;
             
-            // Try local player first (most efficient)
-            if (Player.m_localPlayer != null)
+                        if (Player.m_localPlayer != null)
             {
                 _closestPlayerDistSqr = (Player.m_localPlayer.transform.position - transform.position).sqrMagnitude;
             }
 
-            // Check other players if needed
-            var players = Player.GetAllPlayers();
+                        var players = Player.GetAllPlayers();
             foreach (var player in players)
             {
                 if (player == null) continue;
@@ -131,46 +118,38 @@ namespace ValheimPerformanceOverhaul.AI
             }
         }
 
-        // === МОДУЛЬ 5 & 7: Physics and Animator Management ===
-        private void UpdatePhysicsAndAnimator()
+                private void UpdatePhysicsAndAnimator()
         {
             if (!Plugin.AiThrottlingEnabled.Value) return;
 
             float dist = GetDistanceToPlayer();
 
-            // МОДУЛЬ 5: Physics Sleep
-            if (Plugin.CullPhysicsEnabled.Value && _rigidbody != null)
+                        if (Plugin.CullPhysicsEnabled.Value && _rigidbody != null)
             {
-                bool shouldBeActive = dist < 120f; // Радиус активации физики
-                
+                bool shouldBeActive = dist < 120f;                 
                 if (shouldBeActive != _physicsActive)
                 {
                     SetPhysicsActive(shouldBeActive);
                 }
             }
 
-            // МОДУЛЬ 7: Animator Optimization
-            if (Plugin.AnimatorOptimizationEnabled.Value && _animator != null)
+                        if (Plugin.AnimatorOptimizationEnabled.Value && _animator != null)
             {
-                if (dist > 120f) // Очень далеко - выключаем
-                {
+                if (dist > 120f)                 {
                     if (_animatorActive)
                     {
                         _animator.enabled = false;
                         _animatorActive = false;
                     }
                 }
-                else if (dist > 60f) // Средняя дистанция - замедляем
-                {
+                else if (dist > 60f)                 {
                     if (!_animatorActive)
                     {
                         _animator.enabled = true;
                         _animatorActive = true;
                     }
-                    _animator.speed = _originalAnimatorSpeed * 0.5f; // 50% скорости анимации
-                }
-                else // Близко - полная скорость
-                {
+                    _animator.speed = _originalAnimatorSpeed * 0.5f;                 }
+                else                 {
                     if (!_animatorActive)
                     {
                         _animator.enabled = true;
@@ -183,9 +162,7 @@ namespace ValheimPerformanceOverhaul.AI
 
         private void SetPhysicsActive(bool active)
         {
-            // ✅ ИСПРАВЛЕНИЕ #3: ПОЛНОСТЬЮ игнорируем Characters для физики
-            // Если выключить коллайдеры но оставить гравитацию (так как Kinematic нельзя), они падают под землю.
-            if (_character != null) return;
+                                    if (_character != null) return;
 
             if (_rigidbody != null)
             {
@@ -214,8 +191,7 @@ namespace ValheimPerformanceOverhaul.AI
             _physicsActive = active;
         }
 
-        // --- Throttling Logic ---
-
+        
         public bool ShouldCheckEnemy(out Character currentEnemy)
         {
             currentEnemy = _cachedEnemy;
@@ -252,20 +228,15 @@ namespace ValheimPerformanceOverhaul.AI
             float interval = GetInterval(0.5f, 2.0f);
 
             bool intervalPassed = (currentTime - _lastPathUpdate >= interval);
-            bool targetMoved = ((targetPos - _lastPathTargetPos).sqrMagnitude >= 4f); // 2 метра
-
-            // Обновляем путь если:
-            // 1. Прошёл интервал времени ИЛИ
-            // 2. Цель сместилась достаточно далеко
-            if (intervalPassed || targetMoved)
+            bool targetMoved = ((targetPos - _lastPathTargetPos).sqrMagnitude >= 4f); 
+                                                if (intervalPassed || targetMoved)
             {
                 _lastPathUpdate = currentTime;
                 _lastPathTargetPos = targetPos;
                 return true;
             }
             
-            return false; // Пропускаем обновление - используем старый путь
-        }
+            return false;         }
 
         public bool GetCachedLOS(Character target, out bool visible)
         {
@@ -301,19 +272,15 @@ namespace ValheimPerformanceOverhaul.AI
             return Mathf.Lerp(min, max, t);
         }
 
-        // ✅ КРИТИЧНО: Очистка LOS кэша для предотвращения утечки памяти
-        // ✅ ДОБАВИТЬ периодическую очистку
-        private void CleanupLOSCache()
+                        private void CleanupLOSCache()
         {
-            if (Time.frameCount % 600 != 0) return; // Раз в 10 секунд
-
+            if (Time.frameCount % 600 != 0) return; 
             float currentTime = Time.time;
             var deadKeys = new List<int>();
 
             foreach (var kvp in _losCache)
             {
-                if (currentTime - kvp.Value.time > 10f) // Старше 10 секунд
-                {
+                if (currentTime - kvp.Value.time > 10f)                 {
                     deadKeys.Add(kvp.Key);
                 }
             }
@@ -326,8 +293,7 @@ namespace ValheimPerformanceOverhaul.AI
 
         private void OnDestroy()
         {
-            // ✅ КРИТИЧНО: Очищаем словари при уничтожении
-            _losCache.Clear();
+                        _losCache.Clear();
         }
     }
 }

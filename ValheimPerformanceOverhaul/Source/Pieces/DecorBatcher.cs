@@ -10,9 +10,7 @@ namespace ValheimPerformanceOverhaul.Pieces
     {
         public static DecorBatcher Instance { get; private set; }
 
-        // Config — registered lazily the same way RainDamagePatch does it,
-        // so we don't need to touch Plugin.cs at all.
-        private static ConfigEntry<bool> _batchingEnabledEntry;
+                        private static ConfigEntry<bool> _batchingEnabledEntry;
         private static ConfigEntry<int> _minPiecesToBatch;
         private static ConfigEntry<float> _rebuildCooldown;
 
@@ -66,14 +64,11 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             if (!BatchingEnabled) return;
 
-            // Only Misc category — structural pieces can be damaged and must stay separate.
-            if (piece.m_category != Piece.PieceCategory.Misc) return;
+                        if (piece.m_category != Piece.PieceCategory.Misc) return;
 
-            // FIX: Skip pieces with WearNTear — combined mesh can't show damage state.
-            if (piece.GetComponent<WearNTear>() != null) return;
+                        if (piece.GetComponent<WearNTear>() != null) return;
 
-            // Skip moving / physics objects.
-            if (piece.GetComponent<ZSyncTransform>() != null) return;
+                        if (piece.GetComponent<ZSyncTransform>() != null) return;
             if (piece.GetComponent<Rigidbody>() != null) return;
 
             var mf = piece.GetComponentInChildren<MeshFilter>();
@@ -112,23 +107,20 @@ namespace ValheimPerformanceOverhaul.Pieces
                 if (chunk.IsDirty && Time.time - chunk.LastUpdateTime > cooldown)
                 {
                     chunk.Rebuild(_minPiecesToBatch?.Value ?? 3);
-                    break; // одна перестройка за кадр
-                }
+                    break;                 }
             }
         }
 
         private void OnDestroy()
         {
-            // Restore all original renderers so nothing stays invisible.
-            foreach (var chunk in _chunks.Values)
+                        foreach (var chunk in _chunks.Values)
                 chunk.RestoreAllRenderers();
 
             _chunks.Clear();
             Instance = null;
         }
 
-        // =====================================================================
-
+        
         private class BatchChunk
         {
             public Vector2Int GridPos;
@@ -137,8 +129,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
             private readonly List<PieceEntry> _entries = new List<PieceEntry>();
             private GameObject _batchRoot;
-            private Mesh _combinedMesh; // FIX: track for explicit cleanup
-
+            private Mesh _combinedMesh; 
             private struct PieceEntry
             {
                 public Piece Piece;
@@ -162,9 +153,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                 int idx = _entries.FindIndex(e => e.Piece == p);
                 if (idx == -1) return;
 
-                // Re-enable the original renderer before removing the entry,
-                // so the piece stays visible until the next Rebuild.
-                if (_entries[idx].MR != null)
+                                                if (_entries[idx].MR != null)
                     _entries[idx].MR.enabled = true;
 
                 _entries.RemoveAt(idx);
@@ -177,10 +166,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                 LastUpdateTime = Time.time;
             }
 
-            /// <summary>
-            /// Re-enable all original MeshRenderers (call before destroying the chunk).
-            /// </summary>
-            public void RestoreAllRenderers()
+                                                public void RestoreAllRenderers()
             {
                 foreach (var e in _entries)
                     if (e.MR != null) e.MR.enabled = true;
@@ -192,26 +178,21 @@ namespace ValheimPerformanceOverhaul.Pieces
             {
                 IsDirty = false;
 
-                // FIX: Re-enable all original renderers BEFORE destroying the old
-                // combined mesh, so there is ZERO visibility gap.
-                foreach (var e in _entries)
+                                                foreach (var e in _entries)
                     if (e.MR != null) e.MR.enabled = true;
 
                 DestroyBatchRoot();
 
-                // Clean up null/destroyed entries.
-                for (int i = _entries.Count - 1; i >= 0; i--)
+                                for (int i = _entries.Count - 1; i >= 0; i--)
                 {
                     if (_entries[i].Piece == null || _entries[i].MF == null || _entries[i].MR == null)
                         _entries.RemoveAt(i);
                 }
 
-                // Not enough pieces to batch — leave originals enabled and exit.
-                if (_entries.Count < minPieces)
+                                if (_entries.Count < minPieces)
                     return;
 
-                // Group by material.
-                var matGroups = new Dictionary<Material, List<CombineInstance>>();
+                                var matGroups = new Dictionary<Material, List<CombineInstance>>();
 
                 foreach (var e in _entries)
                 {
@@ -227,8 +208,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                         transform = e.MF.transform.localToWorldMatrix
                     });
 
-                    // Hide original now that we're actually going to create a batch.
-                    e.MR.enabled = false;
+                                        e.MR.enabled = false;
                 }
 
                 _batchRoot = new GameObject($"_Batch_{GridPos.x}_{GridPos.y}");
@@ -244,8 +224,7 @@ namespace ValheimPerformanceOverhaul.Pieces
                     var mf = go.AddComponent<MeshFilter>();
                     var mr = go.AddComponent<MeshRenderer>();
 
-                    // FIX: store the Mesh reference so we can Destroy it explicitly later.
-                    _combinedMesh = new Mesh();
+                                        _combinedMesh = new Mesh();
                     _combinedMesh.CombineMeshes(kvp.Value.ToArray(), true, true);
                     mf.sharedMesh = _combinedMesh;
                     mr.sharedMaterial = kvp.Key;
@@ -258,8 +237,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
             private void DestroyBatchRoot()
             {
-                // FIX: Explicitly destroy the Mesh asset to prevent memory leak.
-                if (_combinedMesh != null)
+                                if (_combinedMesh != null)
                 {
                     Object.Destroy(_combinedMesh);
                     _combinedMesh = null;
@@ -274,10 +252,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         }
     }
 
-    // =========================================================================
-    // Patches — unchanged in structure, rely on DecorBatcher.BatchingEnabled
-    // =========================================================================
-
+            
     [HarmonyPatch(typeof(Piece), "Awake")]
     public static class DecorBatcher_Awake_Patch
     {

@@ -15,11 +15,9 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 return;
             }
 
-            // Проверяем, не создан ли уже менеджер
-            if (AdvancedLightManager.Instance != null) return;
+                        if (AdvancedLightManager.Instance != null) return;
 
-            // Создаем глобальный менеджер
-            var managerObject = new GameObject("_VPO_AdvancedLightManager");
+                        var managerObject = new GameObject("_VPO_AdvancedLightManager");
             Object.DontDestroyOnLoad(managerObject);
             managerObject.AddComponent<AdvancedLightManager>();
 

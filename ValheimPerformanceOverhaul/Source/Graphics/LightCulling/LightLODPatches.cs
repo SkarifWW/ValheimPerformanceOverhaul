@@ -10,8 +10,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         [HarmonyPostfix]
         private static void InitializeLightLOD(Player __instance)
         {
-            // ✅ КРИТИЧНО: Проверяем и основную систему освещения
-            if (!Plugin.LightCullingEnabled.Value || !Plugin.LightLODEnabled.Value || __instance != Player.m_localPlayer)
+                        if (!Plugin.LightCullingEnabled.Value || !Plugin.LightLODEnabled.Value || __instance != Player.m_localPlayer)
             {
                 return;
             }
@@ -29,8 +28,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         [HarmonyPostfix]
         private static void RegisterNewLights(GameObject __result)
         {
-            // ✅ КРИТИЧНО: Проверяем и основную систему освещения
-            if (!Plugin.LightCullingEnabled.Value || !Plugin.LightLODEnabled.Value || LightLODManager.Instance == null || __result == null)
+                        if (!Plugin.LightCullingEnabled.Value || !Plugin.LightLODEnabled.Value || LightLODManager.Instance == null || __result == null)
             {
                 return;
             }

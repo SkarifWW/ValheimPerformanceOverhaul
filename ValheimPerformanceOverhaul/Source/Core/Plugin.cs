@@ -24,28 +24,22 @@ namespace ValheimPerformanceOverhaul
         public static ManualLogSource Log;
         public static Plugin Instance;
 
-        // === 1. General ===
-        public static ConfigEntry<bool> DebugLoggingEnabled;
+                public static ConfigEntry<bool> DebugLoggingEnabled;
 
-        // === 2. GC Control ===
-        public static ConfigEntry<bool> GcControlEnabled;
+                public static ConfigEntry<bool> GcControlEnabled;
 
-        // === 3. Distance Culler ===
-        public static ConfigEntry<bool> DistanceCullerEnabled;
+                public static ConfigEntry<bool> DistanceCullerEnabled;
         public static ConfigEntry<float> CreatureCullDistance;
         public static ConfigEntry<float> PieceCullDistance;
         public static ConfigEntry<bool> CullPhysicsEnabled;
         public static ConfigEntry<bool> AiThrottlingEnabled;
         public static ConfigEntry<string> CullerExclusions;
 
-        // === 4. Object Pooling ===
-        public static ConfigEntry<bool> ObjectPoolingEnabled;
+                public static ConfigEntry<bool> ObjectPoolingEnabled;
 
-        // === 5. JIT Warm-up ===
-        public static ConfigEntry<bool> JitWarmupEnabled;
+                public static ConfigEntry<bool> JitWarmupEnabled;
 
-        // === 6. Light Culling ===
-        public static ConfigEntry<bool> LightCullingEnabled;
+                public static ConfigEntry<bool> LightCullingEnabled;
         public static ConfigEntry<int> MaxActiveLights;
         public static ConfigEntry<float> LightCullDistance;
         public static ConfigEntry<int> MaxShadowCasters;
@@ -56,12 +50,10 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<float> LightLODEmissiveDistance;
         public static ConfigEntry<float> LightLODBillboardDistance;
 
-        // === 7. Audio ===
-        public static ConfigEntry<bool> AudioPoolingEnabled;
+                public static ConfigEntry<bool> AudioPoolingEnabled;
         public static ConfigEntry<int> AudioPoolSize;
 
-        // === 8. Graphics ===
-        public static ConfigEntry<bool> GraphicsSettingsEnabled;
+                public static ConfigEntry<bool> GraphicsSettingsEnabled;
         public static ConfigEntry<float> ConfigShadowDistance;
         public static ConfigEntry<int> ConfigShadowResolution;
         public static ConfigEntry<int> ConfigShadowCascades;
@@ -69,42 +61,32 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<bool> ConfigReflections;
         public static ConfigEntry<bool> ConfigBloom;
 
-        // REMOVED: Section 9 (Network Throttling) — NetworkManager and NetworkPatches deleted.
-        // ZstdSharp dependency also removed.
-
-        // === 10. Piece Optimization ===
-        public static ConfigEntry<bool> PieceOptimizationEnabled;
+                
+                public static ConfigEntry<bool> PieceOptimizationEnabled;
         public static ConfigEntry<float> PieceUpdateInterval;
         public static ConfigEntry<float> PieceColliderDistance;
         public static ConfigEntry<float> PieceSupportCacheDuration;
         public static ConfigEntry<float> PieceUpdateSkipDistance;
 
-        // === 11. Particle Optimization ===
-        public static ConfigEntry<bool> ParticleOptimizationEnabled;
+                public static ConfigEntry<bool> ParticleOptimizationEnabled;
         public static ConfigEntry<float> ParticleCullDistance;
         public static ConfigEntry<int> MaxActiveParticles;
 
-        // === 12. Vegetation ===
-        public static ConfigEntry<bool> VegetationOptimizationEnabled;
+                public static ConfigEntry<bool> VegetationOptimizationEnabled;
         public static ConfigEntry<float> GrassRenderDistance;
         public static ConfigEntry<float> GrassDensityMultiplier;
         public static ConfigEntry<float> DetailObjectDistance;
         public static ConfigEntry<float> DetailDensity;
         public static ConfigEntry<int> TerrainMaxLOD;
 
-        // === 13. Animator ===
-        public static ConfigEntry<bool> AnimatorOptimizationEnabled;
+                public static ConfigEntry<bool> AnimatorOptimizationEnabled;
 
-        // REMOVED: Section 14 (ZDO Optimization) — ZDOOptimizer.cs deleted.
-        // ZDOOptimizationEnabled and ZDOSyncInterval removed.
-
-        // === 15. Minimap ===
-        public static ConfigEntry<bool> MinimapOptimizationEnabled;
+                
+                public static ConfigEntry<bool> MinimapOptimizationEnabled;
         public static ConfigEntry<int> MinimapTextureSize;
         public static ConfigEntry<int> MinimapUpdateInterval;
 
-        // === 16. Tamed Mob Idle ===
-        public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
+                public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
         public static ConfigEntry<float> TamedIdleDistanceFromCombat;
         public static ConfigEntry<float> TamedIdleBaseDetectionRadius;
         public static ConfigEntry<float> TamedIdleCheckInterval;
@@ -377,8 +359,7 @@ namespace ValheimPerformanceOverhaul
                 false,
                 "Enables bloom glow effect.");
 
-            // Section 9 (Network Throttling) REMOVED.
-
+            
             PieceOptimizationEnabled = Config.Bind(
                 "10. Piece Optimization",
                 "Enabled",
@@ -491,8 +472,7 @@ namespace ValheimPerformanceOverhaul
                 true,
                 "Optimizes character animations.");
 
-            // Section 14 (ZDO Optimization) REMOVED.
-
+            
             MinimapOptimizationEnabled = Config.Bind(
                 "15. Minimap Optimization",
                 "Enabled",

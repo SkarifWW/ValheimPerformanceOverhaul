@@ -106,17 +106,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         public bool HasShadows => _hadShadows;
     }
 
-    // =========================================================================
-    // AdvancedLightManager — FIX: periodic PerformLightScan() removed from Update().
-    //
-    // Было: каждые SCAN_INTERVAL=5с вызывался FindObjectsByType<Light>() — это
-    //       O(N) по всей сцене и давал заметный фриз каждые 5 секунд.
-    //
-    // Стало: один разовый скан в Start() (для огней уже в сцене при загрузке),
-    //        далее — реактивная регистрация через LightCullingPatches.OnObjectInstantiated_Postfix
-    //        (хук на ZNetScene.CreateObject). Никакого периодического сканирования.
-    // =========================================================================
-    public class AdvancedLightManager : MonoBehaviour
+                                            public class AdvancedLightManager : MonoBehaviour
     {
         public static AdvancedLightManager Instance { get; private set; }
 
@@ -140,8 +130,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
         private int _cleanupCounter;
 
         private const float UPDATE_INTERVAL = 0.25f;
-        // FIX: SCAN_INTERVAL and _scanTimer removed — no more periodic FindObjectsByType in Update.
-
+        
         private int _maxActiveLights = 15;
         private int _maxShadowCasters = 5;
         private float _lightCullDistance = 60f;
@@ -168,19 +157,12 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
             Plugin.Log.LogInfo("[LightCulling] Advanced manager starting...");
 
-            // One-time scan for lights already present in the scene at load time.
-            // New lights spawned later are registered reactively via LightCullingPatches.
-            PerformLightScan();
+                                    PerformLightScan();
 
             Plugin.Log.LogInfo($"[LightCulling] Found {_allLights.Count} lights at startup.");
         }
 
-        /// <summary>
-        /// Called ONCE in Start() for lights already loaded, and by LightCullingPatches
-        /// on ZNetScene.CreateObject for newly spawned objects.
-        /// NOT called periodically — that caused 5-second friezs.
-        /// </summary>
-        private void PerformLightScan()
+                                                private void PerformLightScan()
         {
             var existingLights = Object.FindObjectsByType<Light>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -230,9 +212,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
             _updateTimer += Time.deltaTime;
 
-            // FIX: _scanTimer block removed entirely.
-            // There is NO periodic FindObjectsByType here anymore.
-
+                        
             if (_updateTimer < UPDATE_INTERVAL) return;
             _updateTimer = 0f;
 
@@ -258,8 +238,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
             }
 
-            // Shrink array if it's oversized
-            if (_allLights.Count < _lightInfos.Length / 4 && _lightInfos.Length > 256)
+                        if (_allLights.Count < _lightInfos.Length / 4 && _lightInfos.Length > 256)
             {
                 int newSize = Mathf.Max(256, _allLights.Count * 2);
                 System.Array.Resize(ref _lightInfos, newSize);

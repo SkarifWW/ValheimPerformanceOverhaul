@@ -58,11 +58,9 @@ namespace ValheimPerformanceOverhaul.Network
         private static byte[] _dictBytes;
         private static bool _isInitialized = false;
 
-        // ✅ НОВОЕ: Header bytes для идентификации формата
-        private const byte HEADER_UNCOMPRESSED = 0x00;
+                private const byte HEADER_UNCOMPRESSED = 0x00;
         private const byte HEADER_COMPRESSED = 0x01;
-        private const byte HEADER_LEGACY = 0xFF; // Для обратной совместимости
-
+        private const byte HEADER_LEGACY = 0xFF; 
         private static int _compressionThreshold = 128;
         private static float _minCompressionRatio = 0.95f;
 
@@ -72,8 +70,7 @@ namespace ValheimPerformanceOverhaul.Network
 
             try
             {
-                _compressor = new Compressor(1); // Уровень 1 - быстрый
-                _decompressor = new Decompressor();
+                _compressor = new Compressor(1);                 _decompressor = new Decompressor();
 
                 var assembly = Assembly.GetExecutingAssembly();
                 using (var stream = assembly.GetManifestResourceStream("ValheimPerformanceOverhaul.Resources.dict.small"))
@@ -109,11 +106,9 @@ namespace ValheimPerformanceOverhaul.Network
             if (!_isInitialized || _compressor == null || data == null || data.Length == 0)
                 return data;
 
-            // ✅ ИСПРАВЛЕНО: Проверяем размер перед сжатием
-            if (data.Length < _compressionThreshold)
+                        if (data.Length < _compressionThreshold)
             {
-                // ✅ КРИТИЧНО: Добавляем header для маленьких пакетов
-                var uncompressed = new byte[data.Length + 1];
+                                var uncompressed = new byte[data.Length + 1];
                 uncompressed[0] = HEADER_UNCOMPRESSED;
                 Buffer.BlockCopy(data, 0, uncompressed, 1, data.Length);
 
@@ -127,13 +122,10 @@ namespace ValheimPerformanceOverhaul.Network
             {
                 byte[] compressed = _compressor.Wrap(new ReadOnlySpan<byte>(data)).ToArray();
 
-                // ✅ ИСПРАВЛЕНО: Проверяем эффективность сжатия
-                float compressionRatio = (float)(compressed.Length + 1) / data.Length; // +1 для header
-
+                                float compressionRatio = (float)(compressed.Length + 1) / data.Length; 
                 if (compressionRatio >= _minCompressionRatio)
                 {
-                    // ✅ Сжатие неэффективно - возвращаем несжатое с header
-                    var uncompressed = new byte[data.Length + 1];
+                                        var uncompressed = new byte[data.Length + 1];
                     uncompressed[0] = HEADER_UNCOMPRESSED;
                     Buffer.BlockCopy(data, 0, uncompressed, 1, data.Length);
 
@@ -143,8 +135,7 @@ namespace ValheimPerformanceOverhaul.Network
                     return uncompressed;
                 }
 
-                // ✅ КРИТИЧНО: Добавляем header к сжатым данным
-                var result = new byte[compressed.Length + 1];
+                                var result = new byte[compressed.Length + 1];
                 result[0] = HEADER_COMPRESSED;
                 Buffer.BlockCopy(compressed, 0, result, 1, compressed.Length);
 
@@ -157,8 +148,7 @@ namespace ValheimPerformanceOverhaul.Network
             {
                 Plugin.Log.LogError($"[Network] Compression failed: {e.Message}");
 
-                // ✅ В случае ошибки возвращаем с UNCOMPRESSED header
-                var fallback = new byte[data.Length + 1];
+                                var fallback = new byte[data.Length + 1];
                 fallback[0] = HEADER_UNCOMPRESSED;
                 Buffer.BlockCopy(data, 0, fallback, 1, data.Length);
                 return fallback;
@@ -174,11 +164,9 @@ namespace ValheimPerformanceOverhaul.Network
             {
                 byte header = data[0];
 
-                // ✅ ИСПРАВЛЕНО: Проверяем header
-                if (header == HEADER_UNCOMPRESSED)
+                                if (header == HEADER_UNCOMPRESSED)
                 {
-                    // Несжатые данные - извлекаем без header
-                    var result = new byte[data.Length - 1];
+                                        var result = new byte[data.Length - 1];
                     Buffer.BlockCopy(data, 1, result, 0, result.Length);
 
                     if (Plugin.DebugLoggingEnabled.Value)
@@ -188,8 +176,7 @@ namespace ValheimPerformanceOverhaul.Network
                 }
                 else if (header == HEADER_COMPRESSED)
                 {
-                    // Сжатые данные - декомпрессируем без header
-                    var compressed = new byte[data.Length - 1];
+                                        var compressed = new byte[data.Length - 1];
                     Buffer.BlockCopy(data, 1, compressed, 0, compressed.Length);
 
                     byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(compressed)).ToArray();
@@ -201,14 +188,11 @@ namespace ValheimPerformanceOverhaul.Network
                 }
                 else
                 {
-                    // ✅ НОВОЕ: Legacy формат без header (для обратной совместимости)
-                    // Проверяем магическое число Zstd
-                    if (data.Length >= 4)
+                                                            if (data.Length >= 4)
                     {
                         uint magic = (uint)((data[3] << 24) | (data[2] << 16) | (data[1] << 8) | data[0]);
 
-                        if (magic == 0xFD2FB528) // Zstd magic number
-                        {
+                        if (magic == 0xFD2FB528)                         {
                             byte[] decompressed = _decompressor.Unwrap(new ReadOnlySpan<byte>(data)).ToArray();
 
                             if (Plugin.DebugLoggingEnabled.Value)
@@ -218,8 +202,7 @@ namespace ValheimPerformanceOverhaul.Network
                         }
                     }
 
-                    // Неизвестный формат - возвращаем как есть
-                    if (Plugin.DebugLoggingEnabled.Value)
+                                        if (Plugin.DebugLoggingEnabled.Value)
                         Plugin.Log.LogWarning($"[Network] Unknown packet format, header: 0x{header:X2}");
 
                     return data;
@@ -228,12 +211,10 @@ namespace ValheimPerformanceOverhaul.Network
             catch (System.Exception e)
             {
                 Plugin.Log.LogError($"[Network] Decompression failed: {e.Message}");
-                return data; // Возвращаем оригинал в случае ошибки
-            }
+                return data;             }
         }
 
-        // ✅ НОВОЕ: Статистика компрессии
-        private static long _totalBytesIn = 0;
+                private static long _totalBytesIn = 0;
         private static long _totalBytesOut = 0;
         private static long _totalPackets = 0;
 

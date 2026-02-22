@@ -7,12 +7,9 @@ namespace ValheimPerformanceOverhaul
     [HarmonyPatch(typeof(Resources), nameof(Resources.UnloadUnusedAssets))]
     public static class GCPatches
     {
-        // УДАЛЕНО: private delegate Vector3 GetMoveDirDelegate(Character character);
-        // ОСТАВЛЯЕМ: Делегат для метода нужен, так как CreateDelegate возвращает общий Delegate
-        private delegate bool InAttackDelegate(Player player);
+                        private delegate bool InAttackDelegate(Player player);
 
-        // ✅ ИСПРАВЛЕНО: Используем родной тип делегата Harmony для полей
-        private static AccessTools.FieldRef<Character, Vector3> _getMoveDirFast;
+                private static AccessTools.FieldRef<Character, Vector3> _getMoveDirFast;
 
         private static InAttackDelegate _inAttackFast;
         private static bool _delegatesInitialized = false;
@@ -26,11 +23,9 @@ namespace ValheimPerformanceOverhaul
 
                 if (moveDirField != null && inAttackMethod != null)
                 {
-                    // ✅ ИСПРАВЛЕНО: Типы теперь совпадают
-                    _getMoveDirFast = AccessTools.FieldRefAccess<Character, Vector3>(moveDirField);
+                                        _getMoveDirFast = AccessTools.FieldRefAccess<Character, Vector3>(moveDirField);
 
-                    // Для методов все остается как было (CreateDelegate требует явного приведения)
-                    _inAttackFast = (InAttackDelegate)System.Delegate.CreateDelegate(
+                                        _inAttackFast = (InAttackDelegate)System.Delegate.CreateDelegate(
                         typeof(InAttackDelegate),
                         inAttackMethod
                     );
@@ -69,8 +64,7 @@ namespace ValheimPerformanceOverhaul
                     return false;
                 }
 
-                // Использование остается прежним - синтаксис вызова такой же
-                Vector3 dir = _getMoveDirFast(localPlayer);
+                                Vector3 dir = _getMoveDirFast(localPlayer);
                 if (dir.sqrMagnitude > 0.01f)
                     return false;
 

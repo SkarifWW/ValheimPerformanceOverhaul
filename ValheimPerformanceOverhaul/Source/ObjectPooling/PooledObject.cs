@@ -6,19 +6,15 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
     {
         public int PrefabHash { get; private set; }
 
-        // ✅ КРИТИЧНО: Добавлена защита от повторного использования
-        private bool _isInUse = false;
-        private int _useCount = 0; // Для дебага
-
+                private bool _isInUse = false;
+        private int _useCount = 0; 
         public void Initialize(string prefabName)
         {
-            // ✅ КРИТИЧНО: Проверяем, не используется ли уже объект
-            if (_isInUse)
+                        if (_isInUse)
             {
                 Plugin.Log.LogError($"[PooledObject] CRITICAL: Object already in use! {prefabName} (Use count: {_useCount})");
 
-                // Форсированный сброс (emergency fallback)
-                MarkAsAvailable();
+                                MarkAsAvailable();
             }
 
             _isInUse = true;
@@ -31,10 +27,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             }
         }
 
-        /// <summary>
-        /// ✅ НОВЫЙ МЕТОД: Отмечаем объект как доступный для повторного использования
-        /// </summary>
-        public void MarkAsAvailable()
+                                public void MarkAsAvailable()
         {
             if (!_isInUse && _useCount > 0)
             {
@@ -49,15 +42,9 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             }
         }
 
-        /// <summary>
-        /// ✅ НОВОЕ: Проверка, используется ли объект
-        /// </summary>
-        public bool IsInUse => _isInUse;
+                                public bool IsInUse => _isInUse;
 
-        /// <summary>
-        /// ✅ НОВОЕ: Для дебага - сколько раз объект переиспользован
-        /// </summary>
-        public int UseCount => _useCount;
+                                public int UseCount => _useCount;
 
         private void OnDestroy()
         {
@@ -67,8 +54,7 @@ namespace ValheimPerformanceOverhaul.ObjectPooling
             }
         }
 
-        // ✅ НОВОЕ: Дополнительная защита - проверка при активации
-        private void OnEnable()
+                private void OnEnable()
         {
             if (!_isInUse && _useCount > 0)
             {

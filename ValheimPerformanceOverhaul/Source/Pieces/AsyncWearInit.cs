@@ -25,10 +25,7 @@ namespace ValheimPerformanceOverhaul.Pieces
 
         private void Update()
         {
-            // FIX: Early exit — не тратим время на вызов метода когда очередь пуста.
-            // Без этого Update() каждый кадр входил в метод, делал Count-check и выходил.
-            // Звучит дёшево, но при 60fps это 60 бесполезных вызовов в секунду.
-            if (_pendingEnable.Count == 0) return;
+                                                if (_pendingEnable.Count == 0) return;
 
             int count = 0;
             while (_pendingEnable.Count > 0 && count < MAX_ENABLES_PER_FRAME)

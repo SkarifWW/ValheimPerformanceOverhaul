@@ -3,12 +3,7 @@ using UnityEngine;
 
 namespace ValheimPerformanceOverhaul
 {
-    // =========================================================================
-    // DistanceCuller больше НЕ имеет Update().
-    // Вся логика вызывается из DistanceCullerManager.Update() — одного цикла
-    // на все объекты. 300 блоков = 1 Update() вместо 300.
-    // =========================================================================
-    public class DistanceCuller : MonoBehaviour
+                        public class DistanceCuller : MonoBehaviour
     {
         private readonly List<MonoBehaviour> _culledComponents = new List<MonoBehaviour>();
         private readonly List<Rigidbody> _trackedRigidbodies = new List<Rigidbody>();
@@ -46,8 +41,7 @@ namespace ValheimPerformanceOverhaul
                 if (Plugin.CullPhysicsEnabled.Value && !_isCharacter)
                     CollectRigidbodies();
 
-                // Регистрируемся в менеджере — он будет вызывать ManagerUpdate().
-                DistanceCullerManager.Instance?.RegisterCuller(this);
+                                DistanceCullerManager.Instance?.RegisterCuller(this);
             }
             catch (System.Exception e)
             {
@@ -92,8 +86,7 @@ namespace ValheimPerformanceOverhaul
                     $"[DistanceCuller] Collected {_trackedRigidbodies.Count} Rigidbodies on {gameObject.name}");
         }
 
-        // Вызывается из DistanceCullerManager — НЕ из Unity Update().
-        public void ManagerUpdate(IReadOnlyList<Player> players)
+                public void ManagerUpdate(IReadOnlyList<Player> players)
         {
             if (players == null || players.Count == 0)
             {
@@ -124,9 +117,7 @@ namespace ValheimPerformanceOverhaul
 
         private bool DetermineCullingState(float distSqr)
         {
-            // Гистерезис: выходим из culled-состояния только когда игрок
-            // подошёл достаточно близко, чтобы не флипать туда-обратно на границе.
-            return _isCulled
+                                    return _isCulled
                 ? distSqr > _wakeUpDistanceSqr
                 : distSqr > _cullDistanceSqr;
         }
@@ -142,9 +133,7 @@ namespace ValheimPerformanceOverhaul
             }
             else
             {
-                // Не-владелец никогда не должен быть заспан нами —
-                // его состоянием управляет владелец.
-                if (_isCulled)
+                                                if (_isCulled)
                     SetComponentsEnabled(true);
             }
         }
@@ -197,8 +186,7 @@ namespace ValheimPerformanceOverhaul
         {
             try
             {
-                // Отписываемся от менеджера.
-                DistanceCullerManager.Instance?.UnregisterCuller(this);
+                                DistanceCullerManager.Instance?.UnregisterCuller(this);
 
                 if (_isCulled)
                     SetComponentsEnabled(true);

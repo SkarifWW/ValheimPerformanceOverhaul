@@ -15,8 +15,7 @@ namespace ValheimPerformanceOverhaul
         [HarmonyPostfix]
         private static void ApplyPostProcessingSettings(GameCamera __instance)
         {
-            // Проверяем, включен ли модуль в конфиге
-            if (!Plugin.GraphicsSettingsEnabled.Value) return;
+                        if (!Plugin.GraphicsSettingsEnabled.Value) return;
 
             var postProcessingBehaviour = __instance.GetComponent<PostProcessingBehaviour>();
             if (postProcessingBehaviour == null || postProcessingBehaviour.profile == null) return;
@@ -33,8 +32,7 @@ namespace ValheimPerformanceOverhaul
         [HarmonyPostfix]
         private static void ApplyInitialTerrainSettings()
         {
-            // Проверяем, включен ли модуль в конфиге
-            if (!Plugin.GraphicsSettingsEnabled.Value) return;
+                        if (!Plugin.GraphicsSettingsEnabled.Value) return;
 
             if (_heightmapsListField == null) return;
 

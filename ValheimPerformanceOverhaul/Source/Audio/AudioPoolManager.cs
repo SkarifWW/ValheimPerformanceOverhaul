@@ -19,14 +19,8 @@ namespace ValheimPerformanceOverhaul.Audio
         {
             if (!_isAvailable && Source != null)
             {
-                // ИСПРАВЛЕНО: Проверяем реальную длину клипа и добавляем буфер
-                float expectedEndTime = _playStartTime + _clipLength + 0.1f; // +0.1с буфер
-
-                // Возвращаем в пул только когда:
-                // 1. Звук точно закончился
-                // 2. Прошло достаточно времени
-                // 3. AudioSource не играет
-                if (Time.time >= expectedEndTime && !Source.isPlaying)
+                                float expectedEndTime = _playStartTime + _clipLength + 0.1f; 
+                                                                                if (Time.time >= expectedEndTime && !Source.isPlaying)
                 {
                     SetAvailable(true);
                 }
@@ -40,19 +34,15 @@ namespace ValheimPerformanceOverhaul.Audio
             _isAvailable = false;
             _playStartTime = Time.time;
 
-            // КРИТИЧНО: Сохраняем длину клипа с учетом pitch
-            _clipLength = original.clip.length;
-            if (original.pitch > 0.01f) // Избегаем деления на 0
-            {
+                        _clipLength = original.clip.length;
+            if (original.pitch > 0.01f)             {
                 _clipLength /= Mathf.Abs(original.pitch);
             }
 
-            // Копируем все параметры
-            Source.clip = original.clip;
+                        Source.clip = original.clip;
             Source.volume = original.volume;
             Source.pitch = original.pitch;
-            Source.loop = original.loop; // ВАЖНО: поддержка loop
-            Source.outputAudioMixerGroup = original.outputAudioMixerGroup;
+            Source.loop = original.loop;             Source.outputAudioMixerGroup = original.outputAudioMixerGroup;
             Source.spatialBlend = original.spatialBlend;
             Source.rolloffMode = original.rolloffMode;
             Source.minDistance = original.minDistance;
@@ -61,11 +51,9 @@ namespace ValheimPerformanceOverhaul.Audio
             Source.dopplerLevel = original.dopplerLevel;
             Source.priority = original.priority;
 
-            // Копируем позицию
-            Source.transform.position = original.transform.position;
+                        Source.transform.position = original.transform.position;
 
-            // ИСПРАВЛЕНО: Играем звук
-            Source.Play();
+                        Source.Play();
 
             if (Plugin.DebugLoggingEnabled.Value)
             {
@@ -80,8 +68,7 @@ namespace ValheimPerformanceOverhaul.Audio
 
             if (available)
             {
-                // Останавливаем звук перед возвратом
-                if (Source != null)
+                                if (Source != null)
                 {
                     Source.Stop();
                     Source.clip = null;
@@ -138,8 +125,7 @@ namespace ValheimPerformanceOverhaul.Audio
             audioSource.maxDistance = 40f;
             audioSource.spread = 120f;
             audioSource.dopplerLevel = 0;
-            audioSource.priority = 128; // Средний приоритет
-
+            audioSource.priority = 128; 
             var pooledAudio = audioSourceObj.AddComponent<PooledAudio>();
             _allSources.Add(pooledAudio);
             _availablePool.Push(pooledAudio);
@@ -152,10 +138,8 @@ namespace ValheimPerformanceOverhaul.Audio
                 return false;
             }
 
-            // ФИЛЬТРЫ: что НЕ пулить
-
-            // 1. Музыка и GUI звуки
-            if (originalSource.outputAudioMixerGroup != null)
+            
+                        if (originalSource.outputAudioMixerGroup != null)
             {
                 string groupName = originalSource.outputAudioMixerGroup.name.ToLower();
                 if (groupName.Contains("music") || groupName.Contains("gui") || groupName.Contains("voice"))
@@ -164,35 +148,29 @@ namespace ValheimPerformanceOverhaul.Audio
                 }
             }
 
-            // 2. Зацикленные звуки (ambient, fire, etc)
-            if (originalSource.loop)
+                        if (originalSource.loop)
             {
                 return false;
             }
 
-            // 3. 2D звуки (spatialBlend = 0)
-            if (originalSource.spatialBlend < 0.1f)
+                        if (originalSource.spatialBlend < 0.1f)
             {
                 return false;
             }
 
-            // 4. Очень длинные звуки (более 10 секунд)
-            if (originalSource.clip.length > 10f)
+                        if (originalSource.clip.length > 10f)
             {
                 return false;
             }
 
-            // Пытаемся получить источник из пула
-            if (_availablePool.Count > 0)
+                        if (_availablePool.Count > 0)
             {
                 var pooledAudio = _availablePool.Pop();
                 pooledAudio.Play(originalSource);
                 return true;
             }
 
-            // Пул исчерпан - создаем новый источник если есть место
-            if (_allSources.Count < Plugin.AudioPoolSize.Value * 2) // Позволяем расширение до 2x
-            {
+                        if (_allSources.Count < Plugin.AudioPoolSize.Value * 2)             {
                 CreatePooledAudioSource();
                 if (_availablePool.Count > 0)
                 {
@@ -214,8 +192,7 @@ namespace ValheimPerformanceOverhaul.Audio
         {
             if (pooledAudio == null) return;
 
-            // Проверяем, не в пуле ли уже
-            if (!_availablePool.Contains(pooledAudio))
+                        if (!_availablePool.Contains(pooledAudio))
             {
                 _availablePool.Push(pooledAudio);
 
