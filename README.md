@@ -96,13 +96,13 @@ Results depend heavily on scene complexity. Typical gains:
 
 ---
 
-## Compatibility
+## Important
 
 - ✅ Works standalone — no other mods required.
 - ✅ Compatible with most content mods (Epic Loot, Jotunn-based mods, etc.).
 - ⚠️ If Object Pooling conflicts with a loot mod, disable it in config (`4. Object Pooling → Enabled = false`).
+- ⚠️ The mod was created in collaboration with AI. Despite the fact that I conducted test runs in various situations, the mod is in BETA. Although the mod technically cannot break the world, it is advisable to make backups.
 - ❌ Does not support crossplay (Steam + Game Pass mixed sessions). Pure Steam servers are fine.
-
 ---
 
 ## Changelog
