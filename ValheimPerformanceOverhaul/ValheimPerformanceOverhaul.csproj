@@ -150,11 +150,7 @@
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Resources\dict.small" />
-  </ItemGroup>
-  <ItemGroup>
     <EmbeddedResource Include="Resources\System.Memory.dll" />
-    <EmbeddedResource Include="Resources\ZstdSharp.dll" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

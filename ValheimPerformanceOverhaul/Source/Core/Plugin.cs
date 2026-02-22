@@ -17,19 +17,20 @@ namespace ValheimPerformanceOverhaul
     {
         private const string PluginGUID = "com.Skarif.ValheimPerformanceOverhaul";
         private const string PluginName = "Valheim Performance Overhaul";
-        private const string PluginVersion = "2.5.1";
+        private const string PluginVersion = "2.6.0";
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
+
         public static ManualLogSource Log;
         public static Plugin Instance;
 
-        // Секция 1: Общие
+        // === 1. General ===
         public static ConfigEntry<bool> DebugLoggingEnabled;
 
-        // Секция 2: GC Control
+        // === 2. GC Control ===
         public static ConfigEntry<bool> GcControlEnabled;
 
-        // Секция 3: Distance Culler
+        // === 3. Distance Culler ===
         public static ConfigEntry<bool> DistanceCullerEnabled;
         public static ConfigEntry<float> CreatureCullDistance;
         public static ConfigEntry<float> PieceCullDistance;
@@ -37,31 +38,29 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<bool> AiThrottlingEnabled;
         public static ConfigEntry<string> CullerExclusions;
 
-        // Секция 4: Object Pooling
+        // === 4. Object Pooling ===
         public static ConfigEntry<bool> ObjectPoolingEnabled;
 
-        // Секция 5: JIT Warm-up
+        // === 5. JIT Warm-up ===
         public static ConfigEntry<bool> JitWarmupEnabled;
 
-        // Секция 6: Light Culling
+        // === 6. Light Culling ===
         public static ConfigEntry<bool> LightCullingEnabled;
         public static ConfigEntry<int> MaxActiveLights;
         public static ConfigEntry<float> LightCullDistance;
         public static ConfigEntry<int> MaxShadowCasters;
         public static ConfigEntry<float> ShadowCullDistance;
-
-        // Light LOD System
         public static ConfigEntry<bool> LightLODEnabled;
         public static ConfigEntry<float> LightLODFullDistance;
         public static ConfigEntry<float> LightLODNoShadowDistance;
         public static ConfigEntry<float> LightLODEmissiveDistance;
         public static ConfigEntry<float> LightLODBillboardDistance;
 
-        // Секция 7: Audio Optimization
+        // === 7. Audio ===
         public static ConfigEntry<bool> AudioPoolingEnabled;
         public static ConfigEntry<int> AudioPoolSize;
 
-        // Секция 8: Graphics Settings
+        // === 8. Graphics ===
         public static ConfigEntry<bool> GraphicsSettingsEnabled;
         public static ConfigEntry<float> ConfigShadowDistance;
         public static ConfigEntry<int> ConfigShadowResolution;
@@ -70,28 +69,22 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<bool> ConfigReflections;
         public static ConfigEntry<bool> ConfigBloom;
 
-        // Секция 9: Network Throttling
-        public static ConfigEntry<bool> NetworkThrottlingEnabled;
-        public static ConfigEntry<bool> NetworkCompressionEnabled;
-        public static ConfigEntry<float> NetworkUpdateRate;
-        public static ConfigEntry<int> NetworkQueueSize;
-        public static ConfigEntry<int> NetworkSendRateMin;
-        public static ConfigEntry<int> NetworkSendRateMax;
-        public static ConfigEntry<int> NetworkCompressionThreshold;
+        // REMOVED: Section 9 (Network Throttling) — NetworkManager and NetworkPatches deleted.
+        // ZstdSharp dependency also removed.
 
-        // Секция 10: Piece Optimization
+        // === 10. Piece Optimization ===
         public static ConfigEntry<bool> PieceOptimizationEnabled;
         public static ConfigEntry<float> PieceUpdateInterval;
         public static ConfigEntry<float> PieceColliderDistance;
         public static ConfigEntry<float> PieceSupportCacheDuration;
         public static ConfigEntry<float> PieceUpdateSkipDistance;
 
-        // Секция 11: Particle Optimization
+        // === 11. Particle Optimization ===
         public static ConfigEntry<bool> ParticleOptimizationEnabled;
         public static ConfigEntry<float> ParticleCullDistance;
         public static ConfigEntry<int> MaxActiveParticles;
 
-        // Секция 12: Vegetation Optimization
+        // === 12. Vegetation ===
         public static ConfigEntry<bool> VegetationOptimizationEnabled;
         public static ConfigEntry<float> GrassRenderDistance;
         public static ConfigEntry<float> GrassDensityMultiplier;
@@ -99,19 +92,18 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<float> DetailDensity;
         public static ConfigEntry<int> TerrainMaxLOD;
 
-        // Секция 13: Animator Optimization
+        // === 13. Animator ===
         public static ConfigEntry<bool> AnimatorOptimizationEnabled;
 
-        // Секция 14: ZDO Optimization
-        public static ConfigEntry<bool> ZDOOptimizationEnabled;
-        public static ConfigEntry<float> ZDOSyncInterval;
+        // REMOVED: Section 14 (ZDO Optimization) — ZDOOptimizer.cs deleted.
+        // ZDOOptimizationEnabled and ZDOSyncInterval removed.
 
-        // Секция 15: Minimap Optimization
+        // === 15. Minimap ===
         public static ConfigEntry<bool> MinimapOptimizationEnabled;
         public static ConfigEntry<int> MinimapTextureSize;
         public static ConfigEntry<int> MinimapUpdateInterval;
 
-        // Секция 16: Tamed Mob Idle Optimization
+        // === 16. Tamed Mob Idle ===
         public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
         public static ConfigEntry<float> TamedIdleDistanceFromCombat;
         public static ConfigEntry<float> TamedIdleBaseDetectionRadius;
@@ -121,18 +113,17 @@ namespace ValheimPerformanceOverhaul
         {
             Log = Logger;
             Instance = this;
+
             SetupConfig();
 
             Log.LogInfo($"Initializing {PluginName} v{PluginVersion}...");
 
-            // Отложенная инициализация тяжелых систем
             if (GraphicsSettingsEnabled.Value)
             {
                 ApplyImmediateGraphicsSettings();
             }
 
             Log.LogInfo($"Applying Harmony patches...");
-
             try
             {
                 _harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -146,7 +137,6 @@ namespace ValheimPerformanceOverhaul
 
         private void Start()
         {
-            // Отложенная инициализация менеджеров (избегаем lag spike при загрузке)
             if (ObjectPoolingEnabled.Value)
             {
                 ObjectPoolManager.Initialize();
@@ -174,6 +164,7 @@ namespace ValheimPerformanceOverhaul
                 DontDestroyOnLoad(aiManager);
                 Log.LogInfo("[AI] Optimizer manager initialized.");
             }
+
             var memoryManager = new GameObject("_VPO_MemoryManager");
             memoryManager.AddComponent<MemoryManager>();
             DontDestroyOnLoad(memoryManager);
@@ -182,21 +173,18 @@ namespace ValheimPerformanceOverhaul
 
         private void SetupConfig()
         {
-            // Секция 1: Общие
             DebugLoggingEnabled = Config.Bind(
                 "1. General",
                 "Enable Debug Logging",
                 false,
                 "Enables detailed diagnostic logs for troubleshooting.");
 
-            // Секция 2: GC Control
             GcControlEnabled = Config.Bind(
                 "2. GC Control",
                 "Enabled",
                 true,
                 "Prevents garbage collection during combat or movement to reduce stuttering.");
 
-            // Секция 3: Distance Culler
             DistanceCullerEnabled = Config.Bind(
                 "3. Distance Culler",
                 "Enabled",
@@ -237,21 +225,18 @@ namespace ValheimPerformanceOverhaul
                 "TombStone,portal_wood",
                 "Comma-separated list of prefab names to NEVER cull.");
 
-            // Секция 4: Object Pooling
             ObjectPoolingEnabled = Config.Bind(
                 "4. Object Pooling",
                 "Enabled",
                 true,
                 "Reuses ItemDrop objects to reduce instantiation overhead.");
 
-            // Секция 5: JIT Warm-up
             JitWarmupEnabled = Config.Bind(
                 "5. JIT Warm-up",
                 "Enabled",
                 true,
                 "Pre-compiles critical methods at game start to prevent initial stuttering.");
 
-            // Секция 6: Light Culling
             LightCullingEnabled = Config.Bind(
                 "6. Light Culling",
                 "Enabled",
@@ -290,7 +275,6 @@ namespace ValheimPerformanceOverhaul
                     "Distance at which shadows are disabled.",
                     new AcceptableValueRange<float>(10f, 80f)));
 
-            // Light LOD System
             LightLODEnabled = Config.Bind(
                 "6. Light Culling",
                 "Enable Light LOD System",
@@ -329,7 +313,6 @@ namespace ValheimPerformanceOverhaul
                     "Distance at which emissive is replaced with simple billboard.",
                     new AcceptableValueRange<float>(60f, 200f)));
 
-            // Секция 7: Audio Optimization
             AudioPoolingEnabled = Config.Bind(
                 "7. Audio Optimization",
                 "Enabled",
@@ -344,7 +327,6 @@ namespace ValheimPerformanceOverhaul
                     "Total number of reusable AudioSource components.",
                     new AcceptableValueRange<int>(16, 128)));
 
-            // Секция 8: Graphics Settings
             GraphicsSettingsEnabled = Config.Bind(
                 "8. Graphics Settings",
                 "Enabled",
@@ -395,60 +377,8 @@ namespace ValheimPerformanceOverhaul
                 false,
                 "Enables bloom glow effect.");
 
-            // Секция 9: Network Throttling
-            NetworkThrottlingEnabled = Config.Bind(
-                "9. Network Throttling",
-                "Enabled",
-                true,
-                "Enables network optimization module.");
+            // Section 9 (Network Throttling) REMOVED.
 
-            NetworkCompressionEnabled = Config.Bind(
-                "9. Network Throttling",
-                "Enable Compression",
-                true,
-                "Enables Zstd compression for network traffic.");
-
-            NetworkCompressionThreshold = Config.Bind(
-                "9. Network Throttling",
-                "Compression Threshold (bytes)",
-                128,
-                new ConfigDescription(
-                    "Minimum packet size to compress. Smaller packets are not compressed.",
-                    new AcceptableValueRange<int>(64, 512)));
-
-            NetworkUpdateRate = Config.Bind(
-                "9. Network Throttling",
-                "Update Rate Multiplier",
-                0.75f,
-                new ConfigDescription(
-                    "Reduces the frequency of network updates.",
-                    new AcceptableValueRange<float>(0.1f, 1.0f)));
-
-            NetworkQueueSize = Config.Bind(
-                "9. Network Throttling",
-                "Network Queue Size (Bytes)",
-                10240,
-                new ConfigDescription(
-                    "Size of the outgoing message queue.",
-                    new AcceptableValueRange<int>(2048, 65536)));
-
-            NetworkSendRateMin = Config.Bind(
-                "9. Network Throttling",
-                "Min Send Rate (Bytes/s)",
-                153600,
-                new ConfigDescription(
-                    "Minimum data send rate.",
-                    new AcceptableValueRange<int>(65536, 1048576)));
-
-            NetworkSendRateMax = Config.Bind(
-                "9. Network Throttling",
-                "Max Send Rate (Bytes/s)",
-                204800,
-                new ConfigDescription(
-                    "Maximum data send rate.",
-                    new AcceptableValueRange<int>(131072, 2097152)));
-
-            // Секция 10: Piece Optimization
             PieceOptimizationEnabled = Config.Bind(
                 "10. Piece Optimization",
                 "Enabled",
@@ -487,7 +417,6 @@ namespace ValheimPerformanceOverhaul
                     "Distance at which building pieces stop updating entirely.",
                     new AcceptableValueRange<float>(30f, 150f)));
 
-            // Секция 11: Particle Optimization
             ParticleOptimizationEnabled = Config.Bind(
                 "11. Particle Optimization",
                 "Enabled",
@@ -510,7 +439,6 @@ namespace ValheimPerformanceOverhaul
                     "Maximum number of active particle systems.",
                     new AcceptableValueRange<int>(10, 100)));
 
-            // Секция 12: Vegetation Optimization
             VegetationOptimizationEnabled = Config.Bind(
                 "12. Vegetation Optimization",
                 "Enabled",
@@ -557,29 +485,14 @@ namespace ValheimPerformanceOverhaul
                     "Maximum LOD level for terrain.",
                     new AcceptableValueRange<int>(0, 2)));
 
-            // Секция 13: Animator Optimization
             AnimatorOptimizationEnabled = Config.Bind(
                 "13. Animator Optimization",
                 "Enabled",
                 true,
                 "Optimizes character animations.");
 
-            // Секция 14: ZDO Optimization
-            ZDOOptimizationEnabled = Config.Bind(
-                "14. ZDO Optimization",
-                "Enabled",
-                true,
-                "Reduces network synchronization overhead.");
+            // Section 14 (ZDO Optimization) REMOVED.
 
-            ZDOSyncInterval = Config.Bind(
-                "14. ZDO Optimization",
-                "Static Object Sync Interval",
-                2.0f,
-                new ConfigDescription(
-                    "How often static objects sync over network.",
-                    new AcceptableValueRange<float>(0.5f, 10.0f)));
-
-            // Секция 15: Minimap Optimization
             MinimapOptimizationEnabled = Config.Bind(
                 "15. Minimap Optimization",
                 "Enabled",
@@ -602,7 +515,6 @@ namespace ValheimPerformanceOverhaul
                     "Update minimap every N frames.",
                     new AcceptableValueRange<int>(1, 10)));
 
-            // Секция 16: Tamed Mob Idle Optimization
             TamedIdleOptimizationEnabled = Config.Bind(
                 "16. Tamed Mob Idle Optimization",
                 "Enabled",
@@ -639,26 +551,14 @@ namespace ValheimPerformanceOverhaul
             try
             {
                 QualitySettings.shadowDistance = ConfigShadowDistance.Value;
-
                 switch (ConfigShadowResolution.Value)
                 {
-                    case 512:
-                        QualitySettings.shadowResolution = ShadowResolution.Low;
-                        break;
-                    case 1024:
-                        QualitySettings.shadowResolution = ShadowResolution.Medium;
-                        break;
-                    case 2048:
-                        QualitySettings.shadowResolution = ShadowResolution.High;
-                        break;
-                    case 4096:
-                        QualitySettings.shadowResolution = ShadowResolution.VeryHigh;
-                        break;
-                    default:
-                        QualitySettings.shadowResolution = ShadowResolution.Low;
-                        break;
+                    case 512: QualitySettings.shadowResolution = ShadowResolution.Low; break;
+                    case 1024: QualitySettings.shadowResolution = ShadowResolution.Medium; break;
+                    case 2048: QualitySettings.shadowResolution = ShadowResolution.High; break;
+                    case 4096: QualitySettings.shadowResolution = ShadowResolution.VeryHigh; break;
+                    default: QualitySettings.shadowResolution = ShadowResolution.Low; break;
                 }
-
                 QualitySettings.shadowCascades = ConfigShadowCascades.Value;
                 Log.LogInfo("[Graphics] Applied immediate graphics settings.");
             }
@@ -681,21 +581,14 @@ namespace ValheimPerformanceOverhaul
 
         private float _cleanupTimer = 0f;
         private const float CLEANUP_INTERVAL = 60f;
-
         private float _forceGCTimer = 0f;
         private const float FORCE_GC_INTERVAL = 300f;
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
             DontDestroyOnLoad(gameObject);
-
             Plugin.Log.LogInfo("[MemoryManager] Initialized");
         }
 
@@ -713,58 +606,38 @@ namespace ValheimPerformanceOverhaul
             if (_forceGCTimer >= FORCE_GC_INTERVAL)
             {
                 _forceGCTimer = 0f;
-
                 if (ShouldPerformHeavyCleanup())
-                {
                     PerformHeavyCleanup();
-                }
             }
         }
 
         private bool ShouldPerformHeavyCleanup()
         {
             if (Player.m_localPlayer == null) return true;
-
             var player = Player.m_localPlayer;
-            if (player.IsAttached() || player.IsSleeping() || player.InPlaceMode())
-            {
-                return true;
-            }
-
-            return false;
+            return player.IsAttached() || player.IsSleeping() || player.InPlaceMode();
         }
 
         private void PerformLightCleanup()
         {
             int beforeMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
-
             Resources.UnloadUnusedAssets();
-
             int afterMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
-
             if (Plugin.DebugLoggingEnabled.Value)
-            {
                 Plugin.Log.LogInfo($"[MemoryManager] Light cleanup: {beforeMB}MB -> {afterMB}MB");
-            }
         }
 
         private void PerformHeavyCleanup()
         {
             int beforeMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
-
             Resources.UnloadUnusedAssets();
             System.GC.Collect(System.GC.MaxGeneration, System.GCCollectionMode.Forced);
             System.GC.WaitForPendingFinalizers();
             System.GC.Collect();
-
             int afterMB = (int)(System.GC.GetTotalMemory(false) / 1048576);
-
             Plugin.Log.LogInfo($"[MemoryManager] Heavy cleanup: {beforeMB}MB -> {afterMB}MB");
         }
 
-        private void OnDestroy()
-        {
-            Instance = null;
-        }
+        private void OnDestroy() { Instance = null; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿/*
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -251,4 +252,4 @@ namespace ValheimPerformanceOverhaul.Network
             _totalPackets = 0;
         }
     }
-}
+}*/

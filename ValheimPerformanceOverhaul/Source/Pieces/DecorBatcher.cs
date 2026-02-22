@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using HarmonyLib;
-using ValheimPerformanceOverhaul; // Plugin
+using BepInEx.Configuration;
+using ValheimPerformanceOverhaul;
 
 namespace ValheimPerformanceOverhaul.Pieces
 {
@@ -9,12 +10,50 @@ namespace ValheimPerformanceOverhaul.Pieces
     {
         public static DecorBatcher Instance { get; private set; }
 
-        // Grid system for batching (size 32x32?)
-        private const int GRID_SIZE = 32;
-        private readonly Dictionary<Vector2Int, BatchChunk> _chunks = new Dictionary<Vector2Int, BatchChunk>();
+        // Config — registered lazily the same way RainDamagePatch does it,
+        // so we don't need to touch Plugin.cs at all.
+        private static ConfigEntry<bool> _batchingEnabledEntry;
+        private static ConfigEntry<int> _minPiecesToBatch;
+        private static ConfigEntry<float> _rebuildCooldown;
 
-        // Setup via Plugin?
-        public bool BatchingEnabled => false; // Should have its own config?
+        private static bool BatchingEnabled
+        {
+            get
+            {
+                if (_batchingEnabledEntry == null && Plugin.Instance != null)
+                {
+                    _batchingEnabledEntry = Plugin.Instance.Config.Bind(
+                        "17. Decor Batching",
+                        "Enabled",
+                        false,
+                        "Combines meshes of decorative (Misc category) pieces in a chunk grid " +
+                        "to reduce draw calls. Only affects pieces without WearNTear. " +
+                        "Enable on potato PCs with many decorations; leave OFF if unsure.");
+
+                    _minPiecesToBatch = Plugin.Instance.Config.Bind(
+                        "17. Decor Batching",
+                        "Min Pieces To Batch",
+                        3,
+                        new ConfigDescription(
+                            "Minimum number of pieces in a chunk before batching is applied.",
+                            new AcceptableValueRange<int>(2, 20)));
+
+                    _rebuildCooldown = Plugin.Instance.Config.Bind(
+                        "17. Decor Batching",
+                        "Rebuild Cooldown (seconds)",
+                        2.0f,
+                        new ConfigDescription(
+                            "How long to wait after a piece change before rebuilding the combined mesh.",
+                            new AcceptableValueRange<float>(0.5f, 10.0f)));
+                }
+                return _batchingEnabledEntry?.Value ?? false;
+            }
+        }
+
+        private const int GRID_SIZE = 32;
+
+        private readonly Dictionary<Vector2Int, BatchChunk> _chunks =
+            new Dictionary<Vector2Int, BatchChunk>();
 
         private void Awake()
         {
@@ -26,54 +65,69 @@ namespace ValheimPerformanceOverhaul.Pieces
         public void RegisterPiece(Piece piece)
         {
             if (!BatchingEnabled) return;
+
+            // Only Misc category — structural pieces can be damaged and must stay separate.
             if (piece.m_category != Piece.PieceCategory.Misc) return;
 
-            // Only batch if it has a MeshFilter/Renderer and is static
+            // FIX: Skip pieces with WearNTear — combined mesh can't show damage state.
+            if (piece.GetComponent<WearNTear>() != null) return;
+
+            // Skip moving / physics objects.
+            if (piece.GetComponent<ZSyncTransform>() != null) return;
+            if (piece.GetComponent<Rigidbody>() != null) return;
+
             var mf = piece.GetComponentInChildren<MeshFilter>();
             var mr = piece.GetComponentInChildren<MeshRenderer>();
-
-            if (mf == null || mr == null) return;
-            if (mr.sharedMaterial == null) return;
+            if (mf == null || mr == null || mr.sharedMaterial == null) return;
 
             Vector2Int gridPos = GetGridPos(piece.transform.position);
-
             if (!_chunks.ContainsKey(gridPos))
-            {
                 _chunks[gridPos] = new BatchChunk(gridPos);
-            }
 
             _chunks[gridPos].AddPiece(piece, mf, mr);
         }
 
         public void UnregisterPiece(Piece piece)
         {
-            // If a piece is destroyed, we must invalidate the batch
+            if (!BatchingEnabled) return;
+
             Vector2Int gridPos = GetGridPos(piece.transform.position);
-            if (_chunks.TryGetValue(gridPos, out BatchChunk chunk))
-            {
+            if (_chunks.TryGetValue(gridPos, out var chunk))
                 chunk.RemovePiece(piece);
-            }
         }
 
-        private Vector2Int GetGridPos(Vector3 pos)
-        {
-            return new Vector2Int(Mathf.FloorToInt(pos.x / GRID_SIZE), Mathf.FloorToInt(pos.z / GRID_SIZE));
-        }
+        private Vector2Int GetGridPos(Vector3 pos) =>
+            new Vector2Int(
+                Mathf.FloorToInt(pos.x / GRID_SIZE),
+                Mathf.FloorToInt(pos.z / GRID_SIZE));
 
         private void Update()
         {
             if (!BatchingEnabled) return;
 
-            // Process one dirty chunk per frame to avoid lag spikes
+            float cooldown = _rebuildCooldown?.Value ?? 2.0f;
+
             foreach (var chunk in _chunks.Values)
             {
-                if (chunk.IsDirty && Time.time - chunk.LastUpdateTime > 2.0f)
+                if (chunk.IsDirty && Time.time - chunk.LastUpdateTime > cooldown)
                 {
-                    chunk.Rebuild();
-                    break;
+                    chunk.Rebuild(_minPiecesToBatch?.Value ?? 3);
+                    break; // одна перестройка за кадр
                 }
             }
         }
+
+        private void OnDestroy()
+        {
+            // Restore all original renderers so nothing stays invisible.
+            foreach (var chunk in _chunks.Values)
+                chunk.RestoreAllRenderers();
+
+            _chunks.Clear();
+            Instance = null;
+        }
+
+        // =====================================================================
 
         private class BatchChunk
         {
@@ -81,8 +135,9 @@ namespace ValheimPerformanceOverhaul.Pieces
             public bool IsDirty;
             public float LastUpdateTime;
 
-            private List<PieceEntry> _entries = new List<PieceEntry>();
+            private readonly List<PieceEntry> _entries = new List<PieceEntry>();
             private GameObject _batchRoot;
+            private Mesh _combinedMesh; // FIX: track for explicit cleanup
 
             private struct PieceEntry
             {
@@ -99,114 +154,137 @@ namespace ValheimPerformanceOverhaul.Pieces
             public void AddPiece(Piece p, MeshFilter mf, MeshRenderer mr)
             {
                 _entries.Add(new PieceEntry { Piece = p, MF = mf, MR = mr });
-                IsDirty = true;
-                LastUpdateTime = Time.time;
+                MarkDirty();
             }
 
             public void RemovePiece(Piece p)
             {
-                int index = _entries.FindIndex(e => e.Piece == p);
-                if (index != -1)
-                {
-                    // If we remove an item, we must re-enable its renderer if it was hidden?
-                    // But it's being destroyed, so who cares.
-                    // However, we MUST rebuild the batch to remove it from visual.
-                    _entries.RemoveAt(index);
-                    IsDirty = true;
-                    LastUpdateTime = Time.time;
-                }
+                int idx = _entries.FindIndex(e => e.Piece == p);
+                if (idx == -1) return;
+
+                // Re-enable the original renderer before removing the entry,
+                // so the piece stays visible until the next Rebuild.
+                if (_entries[idx].MR != null)
+                    _entries[idx].MR.enabled = true;
+
+                _entries.RemoveAt(idx);
+                MarkDirty();
             }
 
-            public void Rebuild()
+            private void MarkDirty()
+            {
+                IsDirty = true;
+                LastUpdateTime = Time.time;
+            }
+
+            /// <summary>
+            /// Re-enable all original MeshRenderers (call before destroying the chunk).
+            /// </summary>
+            public void RestoreAllRenderers()
+            {
+                foreach (var e in _entries)
+                    if (e.MR != null) e.MR.enabled = true;
+
+                DestroyBatchRoot();
+            }
+
+            public void Rebuild(int minPieces)
             {
                 IsDirty = false;
-                LastUpdateTime = Time.time;
 
-                // Cleanup old batch
-                if (_batchRoot != null)
+                // FIX: Re-enable all original renderers BEFORE destroying the old
+                // combined mesh, so there is ZERO visibility gap.
+                foreach (var e in _entries)
+                    if (e.MR != null) e.MR.enabled = true;
+
+                DestroyBatchRoot();
+
+                // Clean up null/destroyed entries.
+                for (int i = _entries.Count - 1; i >= 0; i--)
                 {
-                    Destroy(_batchRoot);
+                    if (_entries[i].Piece == null || _entries[i].MF == null || _entries[i].MR == null)
+                        _entries.RemoveAt(i);
                 }
 
-                if (_entries.Count < 2)
-                {
-                    // Not enough items to batch, just enable originals
-                    foreach (var e in _entries)
-                    {
-                        if (e.MR != null) e.MR.enabled = true;
-                    }
+                // Not enough pieces to batch — leave originals enabled and exit.
+                if (_entries.Count < minPieces)
                     return;
-                }
 
-                // Group by Material
+                // Group by material.
                 var matGroups = new Dictionary<Material, List<CombineInstance>>();
 
                 foreach (var e in _entries)
                 {
-                    if (e.Piece == null || e.MF == null || e.MR == null) continue;
-
                     Material mat = e.MR.sharedMaterial;
                     if (mat == null) continue;
 
                     if (!matGroups.ContainsKey(mat))
-                    {
                         matGroups[mat] = new List<CombineInstance>();
-                    }
 
-                    // Create combine instance relative to world? 
-                    // Mesh.CombineMeshes can take world transform.
-                    var combine = new CombineInstance();
-                    combine.mesh = e.MF.sharedMesh;
-                    combine.transform = e.MF.transform.localToWorldMatrix;
+                    matGroups[mat].Add(new CombineInstance
+                    {
+                        mesh = e.MF.sharedMesh,
+                        transform = e.MF.transform.localToWorldMatrix
+                    });
 
-                    matGroups[mat].Add(combine);
-
-                    // Disable original
+                    // Hide original now that we're actually going to create a batch.
                     e.MR.enabled = false;
                 }
 
-                // Create Batches
                 _batchRoot = new GameObject($"_Batch_{GridPos.x}_{GridPos.y}");
 
                 foreach (var kvp in matGroups)
                 {
-                    Material mat = kvp.Key;
-                    List<CombineInstance> combines = kvp.Value;
+                    if (kvp.Value.Count == 0) continue;
 
-                    // Unity mesh limit
-                    if (combines.Count > 0)
-                    {
-                        GameObject go = new GameObject($"Batch_{mat.name}");
-                        go.transform.SetParent(_batchRoot.transform);
-                        go.transform.position = Vector3.zero; // World space meshes
+                    var go = new GameObject($"Batch_{kvp.Key.name}");
+                    go.transform.SetParent(_batchRoot.transform);
+                    go.transform.position = Vector3.zero;
 
-                        var mf = go.AddComponent<MeshFilter>();
-                        var mr = go.AddComponent<MeshRenderer>();
+                    var mf = go.AddComponent<MeshFilter>();
+                    var mr = go.AddComponent<MeshRenderer>();
 
-                        Mesh newMesh = new Mesh();
-                        newMesh.CombineMeshes(combines.ToArray(), true, true);
+                    // FIX: store the Mesh reference so we can Destroy it explicitly later.
+                    _combinedMesh = new Mesh();
+                    _combinedMesh.CombineMeshes(kvp.Value.ToArray(), true, true);
+                    mf.sharedMesh = _combinedMesh;
+                    mr.sharedMaterial = kvp.Key;
+                }
 
-                        mf.sharedMesh = newMesh;
-                        mr.sharedMaterial = mat;
-                    }
+                if (Plugin.DebugLoggingEnabled.Value)
+                    Plugin.Log.LogInfo(
+                        $"[DecorBatcher] Rebuilt chunk {GridPos} with {_entries.Count} pieces.");
+            }
+
+            private void DestroyBatchRoot()
+            {
+                // FIX: Explicitly destroy the Mesh asset to prevent memory leak.
+                if (_combinedMesh != null)
+                {
+                    Object.Destroy(_combinedMesh);
+                    _combinedMesh = null;
+                }
+
+                if (_batchRoot != null)
+                {
+                    Object.Destroy(_batchRoot);
+                    _batchRoot = null;
                 }
             }
         }
     }
 
-    // Patch to hook into DecorBatcher
+    // =========================================================================
+    // Patches — unchanged in structure, rely on DecorBatcher.BatchingEnabled
+    // =========================================================================
+
     [HarmonyPatch(typeof(Piece), "Awake")]
     public static class DecorBatcher_Awake_Patch
     {
         [HarmonyPostfix]
         private static void Postfix(Piece __instance)
         {
-            // ✅ FIX: Пропускаем ghost объекты (проекции при строительстве)
-            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost"))
-            {
-                return;
-            }
-
+            if (__instance.gameObject.layer == LayerMask.NameToLayer("ghost")) return;
             DecorBatcher.Instance?.RegisterPiece(__instance);
         }
     }

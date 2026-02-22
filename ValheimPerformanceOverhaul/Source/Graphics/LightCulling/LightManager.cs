@@ -26,60 +26,41 @@ namespace ValheimPerformanceOverhaul.LightCulling
         private void Awake()
         {
             LightSource = GetComponent<Light>();
-            if (LightSource != null)
-            {
-                _originalIntensity = LightSource.intensity;
-                _originalRange = LightSource.range;
-                _originalShadows = LightSource.shadows;
-                _hadShadows = _originalShadows != LightShadows.None;
+            if (LightSource == null) return;
 
-                DeterminePriority();
-            }
+            _originalIntensity = LightSource.intensity;
+            _originalRange = LightSource.range;
+            _originalShadows = LightSource.shadows;
+            _hadShadows = _originalShadows != LightShadows.None;
+
+            DeterminePriority();
         }
 
         private void DeterminePriority()
         {
-            if (LightSource == null)
-            {
-                Priority = LightPriority.VeryLow;
-                return;
-            }
+            if (LightSource == null) { Priority = LightPriority.VeryLow; return; }
 
             var parentName = transform.parent != null ? transform.parent.name.ToLower() : "";
             var objectName = gameObject.name.ToLower();
 
             if (transform.root.GetComponent<Player>() != null)
             {
-                Priority = LightPriority.Critical;
-                return;
+                Priority = LightPriority.Critical; return;
             }
-
             if (parentName.Contains("fire") || parentName.Contains("hearth") ||
                 parentName.Contains("brazier") || objectName.Contains("fire"))
             {
-                Priority = LightPriority.High;
-                return;
+                Priority = LightPriority.High; return;
             }
-
             if (parentName.Contains("torch") || parentName.Contains("candle") ||
                 objectName.Contains("torch") || objectName.Contains("candle"))
             {
-                Priority = LightPriority.Medium;
-                return;
+                Priority = LightPriority.Medium; return;
             }
 
-            if (LightSource.intensity > 2.0f)
-            {
-                Priority = LightPriority.High;
-            }
-            else if (LightSource.intensity > 1.0f)
-            {
-                Priority = LightPriority.Medium;
-            }
-            else
-            {
-                Priority = LightPriority.Low;
-            }
+            if (LightSource.intensity > 2.0f) Priority = LightPriority.High;
+            else if (LightSource.intensity > 1.0f) Priority = LightPriority.Medium;
+            else Priority = LightPriority.Low;
         }
 
         public void SetCulled(bool cull, bool disableShadows = false)
@@ -92,10 +73,8 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 {
                     _originalIntensity = LightSource.intensity;
                     _originalRange = LightSource.range;
-
                     LightSource.intensity = 0f;
                     LightSource.range = 0f;
-
                     if (disableShadows && _hadShadows)
                     {
                         _originalShadows = LightSource.shadows;
@@ -109,11 +88,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 {
                     LightSource.intensity = _originalIntensity;
                     LightSource.range = _originalRange;
-
-                    if (_hadShadows)
-                    {
-                        LightSource.shadows = _originalShadows;
-                    }
+                    if (_hadShadows) LightSource.shadows = _originalShadows;
                 }
             }
 
@@ -131,6 +106,16 @@ namespace ValheimPerformanceOverhaul.LightCulling
         public bool HasShadows => _hadShadows;
     }
 
+    // =========================================================================
+    // AdvancedLightManager — FIX: periodic PerformLightScan() removed from Update().
+    //
+    // Было: каждые SCAN_INTERVAL=5с вызывался FindObjectsByType<Light>() — это
+    //       O(N) по всей сцене и давал заметный фриз каждые 5 секунд.
+    //
+    // Стало: один разовый скан в Start() (для огней уже в сцене при загрузке),
+    //        далее — реактивная регистрация через LightCullingPatches.OnObjectInstantiated_Postfix
+    //        (хук на ZNetScene.CreateObject). Никакого периодического сканирования.
+    // =========================================================================
     public class AdvancedLightManager : MonoBehaviour
     {
         public static AdvancedLightManager Instance { get; private set; }
@@ -145,18 +130,17 @@ namespace ValheimPerformanceOverhaul.LightCulling
             public LightPriority Priority;
         }
 
-        // ✅ КРИТИЧНО: Жесткий лимит на размер массива + защита от роста
-        private const int MAX_LIGHT_INFOS = 1024; // Уменьшено с 2048 для предотвращения утечек
-        private const int MAX_TRACKED_LIGHTS = 512; // НОВОЕ: жесткий лимит на _allLights
-        private LightInfo[] _lightInfos = new LightInfo[256]; // Уменьшен начальный размер
+        private const int MAX_LIGHT_INFOS = 1024;
+        private const int MAX_TRACKED_LIGHTS = 512;
+
+        private LightInfo[] _lightInfos = new LightInfo[256];
         private int _lightInfoCount = 0;
 
         private float _updateTimer;
-        private float _scanTimer;
-        private int _cleanupCounter = 0;
+        private int _cleanupCounter;
 
         private const float UPDATE_INTERVAL = 0.25f;
-        private const float SCAN_INTERVAL = 5f;
+        // FIX: SCAN_INTERVAL and _scanTimer removed — no more periodic FindObjectsByType in Update.
 
         private int _maxActiveLights = 15;
         private int _maxShadowCasters = 5;
@@ -165,11 +149,7 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
             LoadConfig();
         }
@@ -184,94 +164,78 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
         private void Start()
         {
-            if (!Plugin.LightCullingEnabled.Value)
-            {
-                enabled = false;
-                return;
-            }
+            if (!Plugin.LightCullingEnabled.Value) { enabled = false; return; }
 
             Plugin.Log.LogInfo("[LightCulling] Advanced manager starting...");
+
+            // One-time scan for lights already present in the scene at load time.
+            // New lights spawned later are registered reactively via LightCullingPatches.
             PerformLightScan();
-            Plugin.Log.LogInfo($"[LightCulling] Found {_allLights.Count} lights.");
+
+            Plugin.Log.LogInfo($"[LightCulling] Found {_allLights.Count} lights at startup.");
         }
 
+        /// <summary>
+        /// Called ONCE in Start() for lights already loaded, and by LightCullingPatches
+        /// on ZNetScene.CreateObject for newly spawned objects.
+        /// NOT called periodically — that caused 5-second friezs.
+        /// </summary>
         private void PerformLightScan()
         {
-            Light[] existingLights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var existingLights = Object.FindObjectsByType<Light>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+
             foreach (var light in existingLights)
-            {
                 TryRegisterLight(light);
-            }
         }
 
         public void TryRegisterLight(Light light)
         {
             if (light == null || light.GetComponent<TrackedLight>() != null) return;
+            if (light.type == LightType.Directional || light.intensity <= 0.1f) return;
 
-            if (light.type == LightType.Directional || light.intensity <= 0.1f)
-                return;
-
-            // ✅ ИСПРАВЛЕНО: Проверяем СТРОГИЙ лимит ПЕРЕД добавлением
             if (_allLights.Count >= MAX_TRACKED_LIGHTS)
             {
                 if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogWarning($"[LightCulling] Max tracked lights reached ({MAX_TRACKED_LIGHTS}), ignoring: {light.name}");
+                    Plugin.Log.LogWarning(
+                        $"[LightCulling] Max tracked lights reached ({MAX_TRACKED_LIGHTS}), ignoring: {light.name}");
                 return;
             }
 
             var tracked = light.gameObject.AddComponent<TrackedLight>();
             _allLights.Add(tracked);
 
-            // ✅ ИСПРАВЛЕНО: Контролируемое увеличение массива
             if (_allLights.Count > _lightInfos.Length && _lightInfos.Length < MAX_LIGHT_INFOS)
             {
                 int newSize = Mathf.Min(_lightInfos.Length * 2, MAX_LIGHT_INFOS);
                 System.Array.Resize(ref _lightInfos, newSize);
-
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[LightCulling] Resized light array to {newSize}");
             }
 
             if (Plugin.DebugLoggingEnabled.Value)
-                Plugin.Log.LogInfo($"[LightCulling] Registered: {light.name} (Priority: {tracked.Priority})");
+                Plugin.Log.LogInfo(
+                    $"[LightCulling] Registered: {light.name} (Priority: {tracked.Priority})");
         }
 
         private void OnDestroy()
         {
             foreach (var light in _allLights)
-            {
-                if (light != null)
-                {
-                    light.SetCulled(false);
-                }
-            }
+                if (light != null) light.SetCulled(false);
             Instance = null;
         }
 
         private void Update()
         {
-            // ✅ КРИТИЧНО: Проверяем конфиг в начале
-            if (!Plugin.LightCullingEnabled.Value)
-            {
-                enabled = false;
-                return;
-            }
-
+            if (!Plugin.LightCullingEnabled.Value) { enabled = false; return; }
             if (Camera.main == null || Player.m_localPlayer == null) return;
 
             _updateTimer += Time.deltaTime;
-            _scanTimer += Time.deltaTime;
 
-            if (_scanTimer >= SCAN_INTERVAL)
-            {
-                _scanTimer = 0f;
-                PerformLightScan();
-            }
+            // FIX: _scanTimer block removed entirely.
+            // There is NO periodic FindObjectsByType here anymore.
 
             if (_updateTimer < UPDATE_INTERVAL) return;
             _updateTimer = 0f;
 
-            // ✅ Ленивая очистка (каждые 10 обновлений)
             _cleanupCounter++;
             if (_cleanupCounter >= 10)
             {
@@ -294,30 +258,17 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
             }
 
-            // ✅ НОВОЕ: Уменьшаем массив если он слишком большой
-            if (_allLights.Count < _lightInfos.Length / 4 && _lightInfos.Length > 512)
+            // Shrink array if it's oversized
+            if (_allLights.Count < _lightInfos.Length / 4 && _lightInfos.Length > 256)
             {
-                int newSize = Mathf.Max(512, _allLights.Count * 2);
+                int newSize = Mathf.Max(256, _allLights.Count * 2);
                 System.Array.Resize(ref _lightInfos, newSize);
-
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[LightCulling] Downsized light array to {newSize}");
             }
 
             if (Plugin.DebugLoggingEnabled.Value && removed > 0)
-            {
-                Plugin.Log.LogInfo($"[LightCulling] Cleaned {removed} null lights, array size: {_lightInfos.Length}");
-            }
-
-            // ✅ НОВОЕ: Уменьшаем массив если он слишком большой
-            int optimalSize = Mathf.Max(512, _allLights.Count * 2);
-            if (_lightInfos.Length > optimalSize * 2)
-            {
-                System.Array.Resize(ref _lightInfos, optimalSize);
-                if (Plugin.DebugLoggingEnabled.Value)
-                    Plugin.Log.LogInfo($"[LightCulling] Downsized array to {optimalSize}");
-            }
-            }
+                Plugin.Log.LogInfo(
+                    $"[LightCulling] Cleaned {removed} null lights. Array: {_lightInfos.Length}");
+        }
 
         private void UpdateLightCulling()
         {
@@ -329,7 +280,6 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
             _lightInfoCount = 0;
 
-            // Собираем информацию о всех источниках
             for (int i = 0; i < _allLights.Count; i++)
             {
                 var light = _allLights[i];
@@ -339,13 +289,16 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
                 if (distSqr <= lightCullDistSqr)
                 {
-                    _lightInfos[_lightInfoCount] = new LightInfo
+                    if (_lightInfoCount < _lightInfos.Length)
                     {
-                        Light = light,
-                        DistanceSqr = distSqr,
-                        Priority = light.Priority
-                    };
-                    _lightInfoCount++;
+                        _lightInfos[_lightInfoCount] = new LightInfo
+                        {
+                            Light = light,
+                            DistanceSqr = distSqr,
+                            Priority = light.Priority
+                        };
+                        _lightInfoCount++;
+                    }
                 }
                 else
                 {
@@ -357,54 +310,39 @@ namespace ValheimPerformanceOverhaul.LightCulling
                 }
             }
 
-            // ✅ Частичная сортировка O(n)
             QuickSelectTopN(_lightInfos, _lightInfoCount, _maxActiveLights);
 
             int activeLightCount = 0;
             int shadowCasterCount = 0;
-
             int processCount = System.Math.Min(_lightInfoCount, _maxActiveLights * 2);
 
             for (int i = 0; i < processCount; i++)
             {
                 var info = _lightInfos[i];
                 var light = info.Light;
-
-                bool withinShadowDistance = info.DistanceSqr <= shadowCullDistSqr;
-                bool canHaveShadows = withinShadowDistance &&
-                                     shadowCasterCount < _maxShadowCasters &&
-                                     light.HasShadows;
-
+                bool withinShadowDist = info.DistanceSqr <= shadowCullDistSqr;
+                bool canHaveShadows = withinShadowDist && shadowCasterCount < _maxShadowCasters && light.HasShadows;
                 bool shouldBeActive = activeLightCount < _maxActiveLights;
 
                 if (shouldBeActive)
                 {
-                    if (light.IsCulled)
-                    {
-                        light.SetCulled(false);
-                        _culledLights.Remove(light);
-                    }
-
+                    if (light.IsCulled) { light.SetCulled(false); _culledLights.Remove(light); }
                     light.SetShadowsOnly(canHaveShadows);
-
-                    if (canHaveShadows)
-                        shadowCasterCount++;
-
+                    if (canHaveShadows) shadowCasterCount++;
                     activeLightCount++;
                 }
                 else
                 {
-                    if (!light.IsCulled)
-                    {
-                        light.SetCulled(true, true);
-                        _culledLights.Add(light);
-                    }
+                    if (!light.IsCulled) { light.SetCulled(true, true); _culledLights.Add(light); }
                 }
             }
 
             if (Plugin.DebugLoggingEnabled.Value && Time.frameCount % 60 == 0)
             {
-                Plugin.Log.LogInfo($"[LightCulling] Active: {activeLightCount}/{_maxActiveLights}, Shadows: {shadowCasterCount}/{_maxShadowCasters}, Total: {_allLights.Count}, Array: {_lightInfos.Length}");
+                Plugin.Log.LogInfo(
+                    $"[LightCulling] Active: {activeLightCount}/{_maxActiveLights}, " +
+                    $"Shadows: {shadowCasterCount}/{_maxShadowCasters}, " +
+                    $"Total: {_allLights.Count}");
             }
         }
 
@@ -419,21 +357,17 @@ namespace ValheimPerformanceOverhaul.LightCulling
             while (left < right)
             {
                 int pivotIndex = Partition(array, left, right);
-
-                if (pivotIndex == topN)
-                    break;
-                else if (pivotIndex < topN)
-                    left = pivotIndex + 1;
-                else
-                    right = pivotIndex - 1;
+                if (pivotIndex == topN) break;
+                else if (pivotIndex < topN) left = pivotIndex + 1;
+                else right = pivotIndex - 1;
             }
 
-            System.Array.Sort(array, 0, System.Math.Min(topN, length),
+            System.Array.Sort(
+                array, 0, System.Math.Min(topN, length),
                 System.Collections.Generic.Comparer<LightInfo>.Create((a, b) =>
                 {
-                    int priorityCompare = a.Priority.CompareTo(b.Priority);
-                    if (priorityCompare != 0) return priorityCompare;
-                    return a.DistanceSqr.CompareTo(b.DistanceSqr);
+                    int pc = a.Priority.CompareTo(b.Priority);
+                    return pc != 0 ? pc : a.DistanceSqr.CompareTo(b.DistanceSqr);
                 }));
         }
 
@@ -444,30 +378,20 @@ namespace ValheimPerformanceOverhaul.LightCulling
 
             for (int j = left; j < right; j++)
             {
-                int priorityCompare = array[j].Priority.CompareTo(pivot.Priority);
-                bool shouldSwap = priorityCompare < 0 ||
-                    (priorityCompare == 0 && array[j].DistanceSqr < pivot.DistanceSqr);
-
+                int pc = array[j].Priority.CompareTo(pivot.Priority);
+                bool shouldSwap = pc < 0 || (pc == 0 && array[j].DistanceSqr < pivot.DistanceSqr);
                 if (shouldSwap)
                 {
                     i++;
-                    var temp = array[i];
-                    array[i] = array[j];
-                    array[j] = temp;
+                    var tmp = array[i]; array[i] = array[j]; array[j] = tmp;
                 }
             }
 
-            var temp2 = array[i + 1];
-            array[i + 1] = array[right];
-            array[right] = temp2;
-
+            var tmp2 = array[i + 1]; array[i + 1] = array[right]; array[right] = tmp2;
             return i + 1;
         }
 
-        public void ForceUpdate()
-        {
-            _updateTimer = UPDATE_INTERVAL;
-        }
+        public void ForceUpdate() => _updateTimer = UPDATE_INTERVAL;
 
         public int TotalLights => _allLights.Count;
         public int CulledLights => _culledLights.Count;

@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿/*
+using HarmonyLib;
 using UnityEngine;
 using System.Collections.Generic;
 
@@ -217,3 +218,4 @@ namespace ValheimPerformanceOverhaul.Network
         }
     }
 }
+*/

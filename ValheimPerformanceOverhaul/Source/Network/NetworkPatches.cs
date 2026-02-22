@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿/*
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using ValheimPerformanceOverhaul.Network; // Подключаем пространство имен с менеджером
@@ -122,3 +123,4 @@ namespace ValheimPerformanceOverhaul.Network
         }
     }
 }
+*/
