@@ -12,12 +12,10 @@ namespace ValheimPerformanceOverhaul.UI
         [HarmonyPostfix]
         public static void ShowWelcomePanel()
         {
-            if (_shown) return;
+            if (_shown || PlayerPrefs.GetInt("VPO_HideWelcome", 0) == 1) return;
             _shown = true;
 
-            if (PlayerPrefs.GetInt("VPO_HideWelcome", 0) == 1) return;
-
-            // ── Canvas ──────────────────────────────────────────────
+            // Canvas
             var canvasGO = new GameObject("WelcomeCanvas");
             var canvas = canvasGO.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -26,227 +24,152 @@ namespace ValheimPerformanceOverhaul.UI
             canvasGO.AddComponent<GraphicRaycaster>();
             Object.DontDestroyOnLoad(canvasGO);
 
-            // ── Фоновая панель: 500x340 ──────────────────────────────
-            var bg = MakeGO("Background", canvasGO.transform);
-            var bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.05f, 0.05f, 0.05f, 0.92f);
+            // Background panel
+            var bg = MakeRect("Background", canvasGO.transform, new Color(0.05f, 0.05f, 0.05f, 0.92f));
             var bgRt = bg.GetComponent<RectTransform>();
             bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
             bgRt.sizeDelta = new Vector2(500, 340);
-            bgRt.anchoredPosition = Vector2.zero;
 
-            // ── Заголовок ────────────────────────────────────────────
-            var header = MakeGO("Header", bg.transform);
-            header.AddComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 1f);
-            Stretch(header, new Vector2(0, 0.82f), new Vector2(1, 1f));
+            // Header
+            var header = MakeRect("Header", bg.transform, new Color(0.1f, 0.1f, 0.1f, 1f));
+            Stretch(header, new Vector2(0, 0.82f), Vector2.one);
+            MakeText("Title", header.transform, "ValheimPerformanceOverhaul - Beta",
+                20, new Color(1f, 0.85f, 0.4f), FontStyle.Bold);
 
-            var titleGO = MakeGO("Title", header.transform);
-            var titleTxt = titleGO.AddComponent<Text>();
-            titleTxt.text = "ValheimPerformanceOverhaul - Beta";
-            titleTxt.font = GetFont();
-            titleTxt.fontSize = 20;
-            titleTxt.fontStyle = FontStyle.Bold;
-            titleTxt.color = new Color(1f, 0.85f, 0.4f);
-            titleTxt.alignment = TextAnchor.MiddleCenter;
-            Stretch(titleGO, Vector2.zero, Vector2.one);
-
-            // ── Тело сообщения ───────────────────────────────────────
-            var bodyGO = MakeGO("Body", bg.transform);
-            var bodyTxt = bodyGO.AddComponent<Text>();
-            bodyTxt.text =
+            // Body
+            var bodyTxt = MakeText("Body", bg.transform,
                 "Hi! Thank you for using my mod.\n\n" +
                 "The mod is in beta, so I'd love to hear any feedback:\n" +
                 "bugs, suggestions, logs - anything.\n\n" +
-                "My Steam account:";
-            bodyTxt.font = GetFont();
-            bodyTxt.fontSize = 15;
-            bodyTxt.color = Color.white;
-            bodyTxt.alignment = TextAnchor.UpperCenter;
+                "My Steam account:",
+                15, Color.white);
             bodyTxt.lineSpacing = 1.3f;
-            var bodyRt = bodyGO.GetComponent<RectTransform>();
-            bodyRt.anchorMin = new Vector2(0, 0.38f);
-            bodyRt.anchorMax = new Vector2(1, 0.82f);
-            bodyRt.offsetMin = new Vector2(20, 0);
-            bodyRt.offsetMax = new Vector2(-20, -8);
+            bodyTxt.alignment = TextAnchor.UpperCenter;
+            SetAnchors(bodyTxt.gameObject, new Vector2(0, 0.38f), new Vector2(1, 0.82f), new Vector2(20, 0), new Vector2(-20, -8));
 
-            // ── Ссылка ───────────────────────────────────────────────
-            var linkGO = MakeGO("Link", bg.transform);
-            var linkBg = linkGO.AddComponent<Image>();
-            linkBg.color = Color.clear;
-            var linkRt = linkGO.GetComponent<RectTransform>();
-            linkRt.anchorMin = new Vector2(0, 0.27f);
-            linkRt.anchorMax = new Vector2(1, 0.38f);
-            linkRt.offsetMin = new Vector2(20, 0);
-            linkRt.offsetMax = new Vector2(-20, 0);
+            // Link
+            var linkGO = MakeRect("Link", bg.transform, Color.clear);
+            SetAnchors(linkGO, new Vector2(0, 0.27f), new Vector2(1, 0.38f), new Vector2(20, 0), new Vector2(-20, 0));
+            MakeText("LinkText", linkGO.transform,
+                "https://steamcommunity.com/id/Skarif_W/", 14, new Color(0.35f, 0.7f, 1f));
 
-            var linkTxtGO = MakeGO("LinkText", linkGO.transform);
-            var linkTxt = linkTxtGO.AddComponent<Text>();
-            linkTxt.text = "https://steamcommunity.com/id/Skarif_W/";
-            linkTxt.font = GetFont();
-            linkTxt.fontSize = 14;
-            linkTxt.color = new Color(0.35f, 0.7f, 1f);
-            linkTxt.alignment = TextAnchor.MiddleCenter;
-            Stretch(linkTxtGO, Vector2.zero, Vector2.one);
+            // Link underline
+            var ulRt = MakeRect("Underline", linkGO.transform, new Color(0.35f, 0.7f, 1f)).GetComponent<RectTransform>();
+            ulRt.anchorMin = new Vector2(0.05f, 0); ulRt.anchorMax = new Vector2(0.95f, 0);
+            ulRt.sizeDelta = new Vector2(0, 1.5f); ulRt.anchoredPosition = new Vector2(0, 3f);
 
-            // Подчёркивание ссылки
-            var ulGO = MakeGO("Underline", linkGO.transform);
-            ulGO.AddComponent<Image>().color = new Color(0.35f, 0.7f, 1f);
-            var ulRt = ulGO.GetComponent<RectTransform>();
-            ulRt.anchorMin = new Vector2(0.05f, 0f);
-            ulRt.anchorMax = new Vector2(0.95f, 0f);
-            ulRt.sizeDelta = new Vector2(0, 1.5f);
-            ulRt.anchoredPosition = new Vector2(0, 3f);
+            // Link button
+            MakeButton(linkGO, linkGO.GetComponent<Image>(), new Color(0.35f, 0.7f, 1f, 0.15f), new Color(0.35f, 0.7f, 1f, 0.3f),
+                () => Application.OpenURL("https://steamcommunity.com/id/Skarif_W/"));
 
-            var linkBtn = linkGO.AddComponent<Button>();
-            linkBtn.targetGraphic = linkBg;
-            var lc = linkBtn.colors;
-            lc.normalColor = Color.clear;
-            lc.highlightedColor = new Color(0.35f, 0.7f, 1f, 0.15f);
-            lc.pressedColor = new Color(0.35f, 0.7f, 1f, 0.3f);
-            linkBtn.colors = lc;
-            linkBtn.onClick.AddListener(() =>
-                Application.OpenURL("https://steamcommunity.com/id/Skarif_W/"));
+            // Separators
+            MakeSeparator("Sep1", bg.transform, 0.25f);
+            MakeSeparator("Sep2", bg.transform, 0.16f);
 
-            // ── Разделитель над чекбоксом ────────────────────────────
-            var sep1 = MakeGO("Sep1", bg.transform);
-            sep1.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.12f);
-            var sep1Rt = sep1.GetComponent<RectTransform>();
-            sep1Rt.anchorMin = new Vector2(0, 0.25f);
-            sep1Rt.anchorMax = new Vector2(1, 0.25f);
-            sep1Rt.sizeDelta = new Vector2(0, 1);
-
-            // ── Чекбокс "Don't show anymore" ─────────────────────────
+            // Checkbox
             bool dontShow = false;
+            var labelTxt = MakeText("Label", bg.transform, "Don't show anymore", 13, new Color(0.75f, 0.75f, 0.75f));
+            SetPivotAnchor(labelTxt.gameObject, new Vector2(0.5f, 0f), new Vector2(180, 30), new Vector2(10f, 70f));
 
-            // Надпись — по центру панели, чуть правее
-            var labelGO = MakeGO("Label", bg.transform);
-            var labelTxt = labelGO.AddComponent<Text>();
-            labelTxt.text = "Don't show anymore";
-            labelTxt.font = GetFont();
-            labelTxt.fontSize = 13;
-            labelTxt.color = new Color(0.75f, 0.75f, 0.75f, 1f);
-            labelTxt.alignment = TextAnchor.MiddleCenter;
-            labelTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            labelTxt.verticalOverflow = VerticalWrapMode.Overflow;
-            var labelRt = labelGO.GetComponent<RectTransform>();
-            labelRt.anchorMin = labelRt.anchorMax = new Vector2(0.5f, 0f);
-            labelRt.sizeDelta = new Vector2(180, 30);
-            labelRt.anchoredPosition = new Vector2(10f, 70f);
+            var boxGO = MakeRect("Box", bg.transform, new Color(0.25f, 0.25f, 0.25f, 1f));
+            SetPivotAnchor(boxGO, new Vector2(0.5f, 0f), new Vector2(18, 18), new Vector2(-83f, 70f));
 
-            // Квадратик — строго слева от надписи
-            var boxGO = MakeGO("Box", bg.transform);
-            var boxImg = boxGO.AddComponent<Image>();
-            boxImg.color = new Color(0.25f, 0.25f, 0.25f, 1f);
-            var boxRt = boxGO.GetComponent<RectTransform>();
-            boxRt.anchorMin = boxRt.anchorMax = new Vector2(0.5f, 0f);
-            boxRt.sizeDelta = new Vector2(18, 18);
-            // надпись шириной 180, её левый край = центр - 90 + 10 = -80
-            // квадратик ставим на -80 - 9 (половина квадратика) - 4 (зазор) = -93
-            boxRt.anchoredPosition = new Vector2(-83f, 70f);
-
-            // Галочка
-            var tickGO = MakeGO("Tick", boxGO.transform);
-            var tickTxt = tickGO.AddComponent<Text>();
-            tickTxt.text = "v";
-            tickTxt.font = GetFont();
-            tickTxt.fontSize = 13;
-            tickTxt.fontStyle = FontStyle.Bold;
-            tickTxt.color = new Color(0.35f, 0.7f, 1f);
-            tickTxt.alignment = TextAnchor.MiddleCenter;
-            Stretch(tickGO, Vector2.zero, Vector2.one);
+            var tickGO = MakeText("Tick", boxGO.transform, "v", 13, new Color(0.35f, 0.7f, 1f), FontStyle.Bold).gameObject;
             tickGO.SetActive(false);
 
-            // Невидимая кнопка поверх обоих элементов
-            var checkHitGO = MakeGO("CheckHit", bg.transform);
-            var checkHitImg = checkHitGO.AddComponent<Image>();
-            checkHitImg.color = Color.clear;
-            var checkHitRt = checkHitGO.GetComponent<RectTransform>();
-            checkHitRt.anchorMin = checkHitRt.anchorMax = new Vector2(0.5f, 0f);
-            checkHitRt.sizeDelta = new Vector2(210, 30);
-            checkHitRt.anchoredPosition = new Vector2(-2f, 70f);
-
-            var checkBtn = checkHitGO.AddComponent<Button>();
-            checkBtn.targetGraphic = checkHitImg;
-            var bcc = checkBtn.colors;
-            bcc.normalColor = Color.clear;
-            bcc.highlightedColor = new Color(1f, 1f, 1f, 0.05f);
-            bcc.pressedColor = new Color(1f, 1f, 1f, 0.1f);
-            checkBtn.colors = bcc;
-            checkBtn.onClick.AddListener(() =>
+            // Checkbox hit area
+            var checkHit = MakeRect("CheckHit", bg.transform, Color.clear);
+            SetPivotAnchor(checkHit, new Vector2(0.5f, 0f), new Vector2(210, 30), new Vector2(-2f, 70f));
+            var boxImg = boxGO.GetComponent<Image>();
+            MakeButton(checkHit, checkHit.GetComponent<Image>(), new Color(1, 1, 1, 0.05f), new Color(1, 1, 1, 0.1f), () =>
             {
                 dontShow = !dontShow;
                 tickGO.SetActive(dontShow);
-                boxImg.color = dontShow
-                    ? new Color(0.1f, 0.25f, 0.45f, 1f)
-                    : new Color(0.25f, 0.25f, 0.25f, 1f);
+                boxImg.color = dontShow ? new Color(0.1f, 0.25f, 0.45f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
             });
 
-            // ── Разделитель над кнопкой Close ────────────────────────
-            var sep2 = MakeGO("Sep2", bg.transform);
-            sep2.AddComponent<Image>().color = new Color(1f, 1f, 1f, 0.12f);
-            var sep2Rt = sep2.GetComponent<RectTransform>();
-            sep2Rt.anchorMin = new Vector2(0, 0.16f);
-            sep2Rt.anchorMax = new Vector2(1, 0.16f);
-            sep2Rt.sizeDelta = new Vector2(0, 1);
-
-            // ── Кнопка Close ─────────────────────────────────────────
-            var closeGO = MakeGO("Close", bg.transform);
-            var closeImg = closeGO.AddComponent<Image>();
-            closeImg.color = new Color(0.65f, 0.15f, 0.15f, 1f);
-            var closeRt = closeGO.GetComponent<RectTransform>();
-            closeRt.anchorMin = new Vector2(0.5f, 0f);
-            closeRt.anchorMax = new Vector2(0.5f, 0f);
-            closeRt.sizeDelta = new Vector2(120, 34);
-            closeRt.anchoredPosition = new Vector2(0, 30f);
-
-            var closeTxtGO = MakeGO("CloseText", closeGO.transform);
-            var closeTxt = closeTxtGO.AddComponent<Text>();
-            closeTxt.text = "Close";
-            closeTxt.font = GetFont();
-            closeTxt.fontSize = 15;
-            closeTxt.color = Color.white;
-            closeTxt.alignment = TextAnchor.MiddleCenter;
-            Stretch(closeTxtGO, Vector2.zero, Vector2.one);
-
-            var closeBtn = closeGO.AddComponent<Button>();
-            closeBtn.targetGraphic = closeImg;
-            var cc = closeBtn.colors;
-            cc.normalColor = new Color(0.65f, 0.15f, 0.15f, 1f);
-            cc.highlightedColor = new Color(0.85f, 0.25f, 0.25f, 1f);
-            cc.pressedColor = new Color(0.45f, 0.08f, 0.08f, 1f);
-            closeBtn.colors = cc;
-            closeBtn.onClick.AddListener(() =>
+            // Close button
+            var closeGO = MakeRect("Close", bg.transform, new Color(0.65f, 0.15f, 0.15f, 1f));
+            SetPivotAnchor(closeGO, new Vector2(0.5f, 0f), new Vector2(120, 34), new Vector2(0, 30f));
+            MakeText("CloseText", closeGO.transform, "Close", 15, Color.white);
+            MakeButton(closeGO, closeGO.GetComponent<Image>(), new Color(0.85f, 0.25f, 0.25f, 1f), new Color(0.45f, 0.08f, 0.08f, 1f), () =>
             {
-                if (dontShow)
-                    PlayerPrefs.SetInt("VPO_HideWelcome", 1);
+                if (dontShow) PlayerPrefs.SetInt("VPO_HideWelcome", 1);
                 Object.Destroy(canvasGO);
             });
         }
 
-        // ── Вспомогательные методы ────────────────────────────────────
+        // ── Helpers ───────────────────────────────────────────────────
+
+        private static GameObject MakeRect(string name, Transform parent, Color color)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<RectTransform>();
+            go.AddComponent<Image>().color = color;
+            return go;
+        }
+
+        private static Text MakeText(string name, Transform parent, string text, int size, Color color,
+            FontStyle style = FontStyle.Normal)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<RectTransform>();
+            var t = go.AddComponent<Text>();
+            t.text = text; t.font = GetFont(); t.fontSize = size;
+            t.color = color; t.fontStyle = style;
+            t.alignment = TextAnchor.MiddleCenter;
+            Stretch(go, Vector2.zero, Vector2.one);
+            return t;
+        }
+
+        private static void MakeButton(GameObject go, Image target, Color highlight, Color pressed, UnityEngine.Events.UnityAction action)
+        {
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = target;
+            var c = btn.colors;
+            c.normalColor = target.color;
+            c.highlightedColor = highlight;
+            c.pressedColor = pressed;
+            btn.colors = c;
+            btn.onClick.AddListener(action);
+        }
+
+        private static void MakeSeparator(string name, Transform parent, float anchorY)
+        {
+            var go = MakeRect(name, parent, new Color(1f, 1f, 1f, 0.12f));
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, anchorY); rt.anchorMax = new Vector2(1, anchorY);
+            rt.sizeDelta = new Vector2(0, 1);
+        }
+
+        private static void Stretch(GameObject go, Vector2 min, Vector2 max)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = min; rt.anchorMax = max;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+        }
+
+        private static void SetAnchors(GameObject go, Vector2 min, Vector2 max, Vector2 offsetMin, Vector2 offsetMax)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = min; rt.anchorMax = max;
+            rt.offsetMin = offsetMin; rt.offsetMax = offsetMax;
+        }
+
+        private static void SetPivotAnchor(GameObject go, Vector2 anchor, Vector2 size, Vector2 pos)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.sizeDelta = size; rt.anchoredPosition = pos;
+        }
 
         private static Font GetFont()
         {
             foreach (var f in Resources.FindObjectsOfTypeAll<Font>())
                 if (f != null) return f;
             return Font.CreateDynamicFontFromOSFont("Arial", 14);
-        }
-
-        private static GameObject MakeGO(string name, Transform parent)
-        {
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.AddComponent<RectTransform>();
-            return go;
-        }
-
-        private static void Stretch(GameObject go, Vector2 anchorMin, Vector2 anchorMax)
-        {
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
         }
     }
 }
