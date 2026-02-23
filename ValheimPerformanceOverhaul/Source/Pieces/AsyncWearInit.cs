@@ -16,6 +16,7 @@ namespace ValheimPerformanceOverhaul.Pieces
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
         }
 
         public void Enqueue(WearNTear wnt)

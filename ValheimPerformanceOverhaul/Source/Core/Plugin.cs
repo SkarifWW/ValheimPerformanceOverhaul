@@ -93,6 +93,7 @@ namespace ValheimPerformanceOverhaul
 
         private void Awake()
         {
+            _harmony.PatchAll(typeof(ValheimPerformanceOverhaul.UI.WelcomeMessage));
             Log = Logger;
             Instance = this;
 
