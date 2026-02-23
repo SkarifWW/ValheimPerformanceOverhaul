@@ -107,6 +107,14 @@ Results depend heavily on scene complexity. Typical gains:
 
 ## Changelog
 
+## v2.6.3
+### Added
+- Welcome screen on main menu launch
+  - Displays a feedback message on first launch
+  - Clickable link to Steam profile for bug reports and suggestions
+  - "Don't show anymore" checkbox to permanently hide the screen
+
+
 ### 2.6.0
 - Removed NetworkManager (ZSteamSocket-only, broke crossplay)
 - Removed ZDOOptimizer (potential desync risk on servers)
