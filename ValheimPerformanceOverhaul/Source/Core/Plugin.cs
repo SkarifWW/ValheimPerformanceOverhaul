@@ -17,7 +17,7 @@ namespace ValheimPerformanceOverhaul
     {
         private const string PluginGUID = "com.Skarif.ValheimPerformanceOverhaul";
         private const string PluginName = "Valheim Performance Overhaul";
-        private const string PluginVersion = "2.7.0";
+        public const string PluginVersion = "2.7.0";
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
 

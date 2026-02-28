@@ -6,18 +6,20 @@ namespace ValheimPerformanceOverhaul.UI
 {
     public static class WelcomeMessage
     {
-        private static bool _shown = false; [HarmonyPatch(typeof(FejdStartup), "Start")]
+        private static bool _shown = false;
+        private static readonly string PREFS_KEY = "VPO_HideWelcome_v" + Plugin.PluginVersion;
+
+        [HarmonyPatch(typeof(FejdStartup), "Start")]
         [HarmonyPostfix]
         public static void ShowWelcomePanel()
         {
             if (_shown) return;
-
-            if (PlayerPrefs.GetInt("VPO_HideWelcome", 0) == 1) return;
+            if (PlayerPrefs.GetInt(PREFS_KEY, 0) == 1) return;
 
             _shown = true;
 
             var canvasGO = new GameObject("WelcomeCanvas_VPO");
-            canvasGO.layer = 5; // Слой UI (5)
+            canvasGO.layer = 5;
 
             var canvas = canvasGO.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -31,7 +33,7 @@ namespace ValheimPerformanceOverhaul.UI
             var bgRt = bg.GetComponent<RectTransform>();
             bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
             bgRt.sizeDelta = new Vector2(550, 480);
-            bgRt.anchoredPosition = Vector2.zero; // Явно ставим по центру экрана
+            bgRt.anchoredPosition = Vector2.zero;
 
             var header = MakeRect("Header", bg.transform, new Color(0.1f, 0.1f, 0.1f, 1f));
             Stretch(header, new Vector2(0, 0.86f), Vector2.one);
@@ -45,7 +47,7 @@ namespace ValheimPerformanceOverhaul.UI
                 "Привет! Спасибо за использование моего мода.\n" +
                 "Мод находится в бете, поэтому я буду рад любым отзывам:\n" +
                 "багам, предложениям, логам - чему угодно.\n\n" +
-                "My Steam account / Мой аккаунт Steam:",
+                "My Discord account / Мой аккаунт Discord:",
                 15, Color.white);
             bodyTxt.lineSpacing = 1.2f;
             bodyTxt.alignment = TextAnchor.UpperCenter;
@@ -54,14 +56,14 @@ namespace ValheimPerformanceOverhaul.UI
             var linkGO = MakeRect("Link", bg.transform, Color.clear);
             SetAnchors(linkGO, new Vector2(0, 0.25f), new Vector2(1, 0.35f), new Vector2(20, 0), new Vector2(-20, 0));
             MakeText("LinkText", linkGO.transform,
-                "https://steamcommunity.com/id/Skarif_W/", 15, new Color(0.35f, 0.7f, 1f));
+                "https://discord.com/users/1084209564653727804 (skarif_q)", 15, new Color(0.35f, 0.7f, 1f));
 
             var ulRt = MakeRect("Underline", linkGO.transform, new Color(0.35f, 0.7f, 1f)).GetComponent<RectTransform>();
             ulRt.anchorMin = new Vector2(0.05f, 0); ulRt.anchorMax = new Vector2(0.95f, 0);
             ulRt.sizeDelta = new Vector2(0, 1.5f); ulRt.anchoredPosition = new Vector2(0, 3f);
 
             MakeButton(linkGO, linkGO.GetComponent<Image>(), new Color(0.35f, 0.7f, 1f, 0.15f), new Color(0.35f, 0.7f, 1f, 0.3f),
-                () => Application.OpenURL("https://steamcommunity.com/id/Skarif_W/"));
+                () => Application.OpenURL("https://discord.com/users/1084209564653727804"));
 
             MakeSeparator("Sep1", bg.transform, 0.22f);
             MakeSeparator("Sep2", bg.transform, 0.14f);
@@ -91,16 +93,15 @@ namespace ValheimPerformanceOverhaul.UI
             MakeText("CloseText", closeGO.transform, "Close / Закрыть", 15, Color.white);
             MakeButton(closeGO, closeGO.GetComponent<Image>(), new Color(0.85f, 0.25f, 0.25f, 1f), new Color(0.45f, 0.08f, 0.08f, 1f), () =>
             {
-                if (dontShow) PlayerPrefs.SetInt("VPO_HideWelcome", 1);
+                if (dontShow) PlayerPrefs.SetInt(PREFS_KEY, 1);
                 Object.Destroy(canvasGO);
             });
         }
 
-
         private static GameObject MakeRect(string name, Transform parent, Color color)
         {
             var go = new GameObject(name);
-            go.layer = 5; // Слой UI
+            go.layer = 5;
             go.transform.SetParent(parent, false);
             go.AddComponent<RectTransform>();
             go.AddComponent<Image>().color = color;
@@ -111,7 +112,7 @@ namespace ValheimPerformanceOverhaul.UI
             FontStyle style = FontStyle.Normal)
         {
             var go = new GameObject(name);
-            go.layer = 5; // Слой UI
+            go.layer = 5;
             go.transform.SetParent(parent, false);
             go.AddComponent<RectTransform>();
             var t = go.AddComponent<Text>();
