@@ -167,7 +167,7 @@ namespace ValheimPerformanceOverhaul.UI
             rt.anchorMin = rt.anchorMax = anchor;
             rt.sizeDelta = size; rt.anchoredPosition = pos;
         }
-
+        
         private static Font GetFont()
         {
             foreach (var f in Resources.FindObjectsOfTypeAll<Font>())
