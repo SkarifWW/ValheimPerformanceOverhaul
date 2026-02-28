@@ -2,11 +2,11 @@
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
-using System.Buffers;
 using System.Reflection;
 using UnityEngine;
 using ValheimPerformanceOverhaul.AI;
 using ValheimPerformanceOverhaul.Audio;
+using ValheimPerformanceOverhaul.Core;
 using ValheimPerformanceOverhaul.LightCulling;
 using ValheimPerformanceOverhaul.ObjectPooling;
 
@@ -17,29 +17,29 @@ namespace ValheimPerformanceOverhaul
     {
         private const string PluginGUID = "com.Skarif.ValheimPerformanceOverhaul";
         private const string PluginName = "Valheim Performance Overhaul";
-        private const string PluginVersion = "2.6.0";
+        private const string PluginVersion = "2.7.0";
 
         private readonly Harmony _harmony = new Harmony(PluginGUID);
 
         public static ManualLogSource Log;
         public static Plugin Instance;
 
-                public static ConfigEntry<bool> DebugLoggingEnabled;
+        public static ConfigEntry<bool> DebugLoggingEnabled;
 
-                public static ConfigEntry<bool> GcControlEnabled;
+        public static ConfigEntry<bool> GcControlEnabled;
 
-                public static ConfigEntry<bool> DistanceCullerEnabled;
+        public static ConfigEntry<bool> DistanceCullerEnabled;
         public static ConfigEntry<float> CreatureCullDistance;
         public static ConfigEntry<float> PieceCullDistance;
         public static ConfigEntry<bool> CullPhysicsEnabled;
         public static ConfigEntry<bool> AiThrottlingEnabled;
         public static ConfigEntry<string> CullerExclusions;
 
-                public static ConfigEntry<bool> ObjectPoolingEnabled;
+        public static ConfigEntry<bool> ObjectPoolingEnabled;
 
-                public static ConfigEntry<bool> JitWarmupEnabled;
+        public static ConfigEntry<bool> JitWarmupEnabled;
 
-                public static ConfigEntry<bool> LightCullingEnabled;
+        public static ConfigEntry<bool> LightCullingEnabled;
         public static ConfigEntry<int> MaxActiveLights;
         public static ConfigEntry<float> LightCullDistance;
         public static ConfigEntry<int> MaxShadowCasters;
@@ -50,10 +50,10 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<float> LightLODEmissiveDistance;
         public static ConfigEntry<float> LightLODBillboardDistance;
 
-                public static ConfigEntry<bool> AudioPoolingEnabled;
+        public static ConfigEntry<bool> AudioPoolingEnabled;
         public static ConfigEntry<int> AudioPoolSize;
 
-                public static ConfigEntry<bool> GraphicsSettingsEnabled;
+        public static ConfigEntry<bool> GraphicsSettingsEnabled;
         public static ConfigEntry<float> ConfigShadowDistance;
         public static ConfigEntry<int> ConfigShadowResolution;
         public static ConfigEntry<int> ConfigShadowCascades;
@@ -61,35 +61,50 @@ namespace ValheimPerformanceOverhaul
         public static ConfigEntry<bool> ConfigReflections;
         public static ConfigEntry<bool> ConfigBloom;
 
-                
-                public static ConfigEntry<bool> PieceOptimizationEnabled;
+        public static ConfigEntry<bool> PieceOptimizationEnabled;
         public static ConfigEntry<float> PieceUpdateInterval;
         public static ConfigEntry<float> PieceColliderDistance;
         public static ConfigEntry<float> PieceSupportCacheDuration;
         public static ConfigEntry<float> PieceUpdateSkipDistance;
 
-                public static ConfigEntry<bool> ParticleOptimizationEnabled;
+        public static ConfigEntry<bool> ParticleOptimizationEnabled;
         public static ConfigEntry<float> ParticleCullDistance;
         public static ConfigEntry<int> MaxActiveParticles;
 
-                public static ConfigEntry<bool> VegetationOptimizationEnabled;
+        public static ConfigEntry<bool> VegetationOptimizationEnabled;
         public static ConfigEntry<float> GrassRenderDistance;
         public static ConfigEntry<float> GrassDensityMultiplier;
         public static ConfigEntry<float> DetailObjectDistance;
         public static ConfigEntry<float> DetailDensity;
         public static ConfigEntry<int> TerrainMaxLOD;
 
-                public static ConfigEntry<bool> AnimatorOptimizationEnabled;
+        public static ConfigEntry<bool> AnimatorOptimizationEnabled;
 
-                
-                public static ConfigEntry<bool> MinimapOptimizationEnabled;
+        public static ConfigEntry<bool> MinimapOptimizationEnabled;
         public static ConfigEntry<int> MinimapTextureSize;
         public static ConfigEntry<int> MinimapUpdateInterval;
 
-                public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
+        public static ConfigEntry<bool> TamedIdleOptimizationEnabled;
         public static ConfigEntry<float> TamedIdleDistanceFromCombat;
         public static ConfigEntry<float> TamedIdleBaseDetectionRadius;
         public static ConfigEntry<float> TamedIdleCheckInterval;
+
+
+        public static ConfigEntry<bool> LightFlickerOptimizationEnabled;
+
+        public static ConfigEntry<bool> SmokeOptimizationEnabled;
+        public static ConfigEntry<float> SmokeLiftForce;
+
+        public static ConfigEntry<bool> EngineQualitySettingsEnabled;
+        public static ConfigEntry<int> ParticleRaycastBudget;
+
+        public static ConfigEntry<bool> SkipIntroEnabled;
+
+        public static ConfigEntry<bool> FrameBudgetGuardEnabled;
+        public static ConfigEntry<float> FrameBudgetThresholdMs;
+        public static ConfigEntry<float> FrameBudgetThrottledDelta;
+        public static ConfigEntry<float> FrameBudgetNormalDelta;
+
 
         private void Awake()
         {
@@ -102,15 +117,13 @@ namespace ValheimPerformanceOverhaul
             Log.LogInfo($"Initializing {PluginName} v{PluginVersion}...");
 
             if (GraphicsSettingsEnabled.Value)
-            {
                 ApplyImmediateGraphicsSettings();
-            }
 
-            Log.LogInfo($"Applying Harmony patches...");
+            Log.LogInfo("Applying Harmony patches...");
             try
             {
                 _harmony.PatchAll(Assembly.GetExecutingAssembly());
-                Log.LogInfo($"All patches applied successfully.");
+                Log.LogInfo("All patches applied successfully.");
             }
             catch (System.Exception e)
             {
@@ -146,6 +159,14 @@ namespace ValheimPerformanceOverhaul
                 aiManager.AddComponent<AIOptimizer>();
                 DontDestroyOnLoad(aiManager);
                 Log.LogInfo("[AI] Optimizer manager initialized.");
+            }
+
+            if (FrameBudgetGuardEnabled.Value)
+            {
+                var guardObj = new GameObject("_VPO_FrameBudgetGuard");
+                guardObj.AddComponent<FrameBudgetGuard>();
+                DontDestroyOnLoad(guardObj);
+                Log.LogInfo("[FrameBudgetGuard] Initialized.");
             }
 
             var memoryManager = new GameObject("_VPO_MemoryManager");
@@ -360,7 +381,6 @@ namespace ValheimPerformanceOverhaul
                 false,
                 "Enables bloom glow effect.");
 
-            
             PieceOptimizationEnabled = Config.Bind(
                 "10. Piece Optimization",
                 "Enabled",
@@ -473,7 +493,6 @@ namespace ValheimPerformanceOverhaul
                 true,
                 "Optimizes character animations.");
 
-            
             MinimapOptimizationEnabled = Config.Bind(
                 "15. Minimap Optimization",
                 "Enabled",
@@ -525,6 +544,83 @@ namespace ValheimPerformanceOverhaul
                 new ConfigDescription(
                     "How often to check if mob should enter/exit idle mode.",
                     new AcceptableValueRange<float>(0.5f, 5f)));
+
+
+            LightFlickerOptimizationEnabled = Config.Bind(
+                "17. Light Flicker Optimization",
+                "Enabled",
+                true,
+                "Fixes light intensity to base value, eliminating Shadow Map recalculation every frame from fires and torches. " +
+                "RECOMMENDED: Large performance gain on bases with many light sources.");
+
+            SmokeOptimizationEnabled = Config.Bind(
+                "18. Smoke Physics Optimization",
+                "Enabled",
+                true,
+                "Replaces complex smoke aerodynamics with simple linear interpolation. " +
+                "Dramatic CPU savings on large bases with many campfires.");
+
+            SmokeLiftForce = Config.Bind(
+                "18. Smoke Physics Optimization",
+                "Smoke Lift Force",
+                3.5f,
+                new ConfigDescription(
+                    "Upward force applied to smoke particles with simplified physics. Higher = faster rising smoke.",
+                    new AcceptableValueRange<float>(1f, 10f)));
+
+            EngineQualitySettingsEnabled = Config.Bind(
+                "19. Engine Quality Settings",
+                "Enabled",
+                true,
+                "Applies low-level Unity QualitySettings tweaks: disables soft particles and soft vegetation, " +
+                "reduces particle raycast budget. Minor visual change, significant GPU gain.");
+
+            ParticleRaycastBudget = Config.Bind(
+                "19. Engine Quality Settings",
+                "Particle Raycast Budget",
+                1024,
+                new ConfigDescription(
+                    "Max number of particle ray-casts per frame. Vanilla default is 4096. Lower = less CPU.",
+                    new AcceptableValueRange<int>(64, 4096)));
+
+            SkipIntroEnabled = Config.Bind(
+                "20. Skip Intro",
+                "Enabled",
+                true,
+                "Skips Iron Gate and Coffee Stain logo screens on game startup. Saves 5–10 seconds per launch.");
+
+            FrameBudgetGuardEnabled = Config.Bind(
+                "21. Frame Budget Guard",
+                "Enabled",
+                true,
+                "Dynamically limits Time.maximumDeltaTime when heavy frame spikes are detected, " +
+                "preventing the Unity physics 'Death Spiral'. Converts hard freezes into brief slow-motion.");
+
+            FrameBudgetThresholdMs = Config.Bind(
+                "21. Frame Budget Guard",
+                "Freeze Threshold (ms)",
+                28f,
+                new ConfigDescription(
+                    "1% Low frametime threshold in milliseconds. If worst frames exceed this, throttling activates. " +
+                    "28ms ≈ below 36 FPS on worst frames.",
+                    new AcceptableValueRange<float>(16f, 100f)));
+
+            FrameBudgetThrottledDelta = Config.Bind(
+                "21. Frame Budget Guard",
+                "Throttled MaxDeltaTime",
+                0.045f,
+                new ConfigDescription(
+                    "Time.maximumDeltaTime when throttling is active (freeze detected). " +
+                    "Lower = physics accuracy is sacrificed more to preserve smoothness.",
+                    new AcceptableValueRange<float>(0.02f, 0.1f)));
+
+            FrameBudgetNormalDelta = Config.Bind(
+                "21. Frame Budget Guard",
+                "Normal MaxDeltaTime",
+                0.07f,
+                new ConfigDescription(
+                    "Time.maximumDeltaTime during normal gameplay. Unity default is 0.3333.",
+                    new AcceptableValueRange<float>(0.03f, 0.2f)));
         }
 
         private void ApplyImmediateGraphicsSettings()

@@ -35,6 +35,9 @@
       <HintPath>C:\Users\fif11\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\OptimizedMod\BepInEx\core\0Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\assembly_guiutils.dll</HintPath>
+    </Reference>
     <Reference Include="assembly_postprocessing">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\assembly_postprocessing.dll</HintPath>
       <Private>False</Private>
@@ -51,6 +54,9 @@
       <HintPath>C:\Users\fif11\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\OptimizedMod\BepInEx\core\BepInEx.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Jotunn">
+      <HintPath>C:\Users\fif11\AppData\Roaming\r2modmanPlus-local\Valheim\profiles\Pidorstan\BepInEx\plugins\ValheimModding-Jotunn\Jotunn.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Memory, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
@@ -64,13 +70,25 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
+    <Reference Include="Unity.InputSystem">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\Unity.InputSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.AIModule">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.AIModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.AnimationModule">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.AnimationModule.dll</HintPath>
       <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.AssetBundleModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AudioModule">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
@@ -79,6 +97,15 @@
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.ParticleSystemModule">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.ParticleSystemModule.dll</HintPath>
@@ -103,6 +130,9 @@
     <Reference Include="UnityEngine.UIModule">
       <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.UIModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.XR.LegacyInputHelpers">
+      <HintPath>..\..\..\..\steam\steamapps\common\Valheim\Valheim_Data\Managed\UnityEngine.XR.LegacyInputHelpers.dll</HintPath>
+    </Reference>
     <Reference Include="ZstdSharp, Version=0.8.6.0, Culture=neutral, PublicKeyToken=8d151af33a4ad5cf, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>Resources\ZstdSharp.dll</HintPath>
@@ -111,9 +141,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Source\Core\DebugPatches.cs" />
+    <Compile Include="Source\Core\FrameBudgetGuard.cs" />
     <Compile Include="Source\Core\GCPatches.cs" />
     <Compile Include="Source\Core\JitPatches.cs" />
     <Compile Include="Source\Core\Plugin.cs" />
+    <Compile Include="Source\Core\SceneLoaderPatch.cs" />
+    <Compile Include="Source\Graphics\EngineQualityPatch.cs" />
+    <Compile Include="Source\Graphics\LightFlickerPatch.cs" />
+    <Compile Include="Source\Optimizations\SmokePatch.cs" />
     <Compile Include="Source\Pieces\AsyncWearInit.cs" />
     <Compile Include="Source\Pieces\DecorBatcher.cs" />
     <Compile Include="Source\Pieces\DecorOptimizer.cs" />

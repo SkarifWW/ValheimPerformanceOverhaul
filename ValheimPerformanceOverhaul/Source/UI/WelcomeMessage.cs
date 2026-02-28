@@ -12,12 +12,10 @@ namespace ValheimPerformanceOverhaul.UI
         {
             if (_shown) return;
 
-            // Используем оригинальный ключ для этого мода
             if (PlayerPrefs.GetInt("VPO_HideWelcome", 0) == 1) return;
 
             _shown = true;
 
-            // Canvas
             var canvasGO = new GameObject("WelcomeCanvas_VPO");
             canvasGO.layer = 5; // Слой UI (5)
 
@@ -29,20 +27,17 @@ namespace ValheimPerformanceOverhaul.UI
             canvasGO.AddComponent<GraphicRaycaster>();
             Object.DontDestroyOnLoad(canvasGO);
 
-            // Background panel
             var bg = MakeRect("Background", canvasGO.transform, new Color(0.05f, 0.05f, 0.05f, 0.96f));
             var bgRt = bg.GetComponent<RectTransform>();
             bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
             bgRt.sizeDelta = new Vector2(550, 480);
             bgRt.anchoredPosition = Vector2.zero; // Явно ставим по центру экрана
 
-            // Header
             var header = MakeRect("Header", bg.transform, new Color(0.1f, 0.1f, 0.1f, 1f));
             Stretch(header, new Vector2(0, 0.86f), Vector2.one);
             MakeText("Title", header.transform, "ValheimPerformanceOverhaul",
                 22, new Color(1f, 0.85f, 0.4f), FontStyle.Bold);
 
-            // Body
             var bodyTxt = MakeText("Body", bg.transform,
                 "Hi! Thank you for using my mod.\n" +
                 "The mod is in beta, so I'd love to hear any feedback:\n" +
@@ -56,26 +51,21 @@ namespace ValheimPerformanceOverhaul.UI
             bodyTxt.alignment = TextAnchor.UpperCenter;
             SetAnchors(bodyTxt.gameObject, new Vector2(0, 0.35f), new Vector2(1, 0.86f), new Vector2(20, 0), new Vector2(-20, -15));
 
-            // Link
             var linkGO = MakeRect("Link", bg.transform, Color.clear);
             SetAnchors(linkGO, new Vector2(0, 0.25f), new Vector2(1, 0.35f), new Vector2(20, 0), new Vector2(-20, 0));
             MakeText("LinkText", linkGO.transform,
                 "https://steamcommunity.com/id/Skarif_W/", 15, new Color(0.35f, 0.7f, 1f));
 
-            // Link underline
             var ulRt = MakeRect("Underline", linkGO.transform, new Color(0.35f, 0.7f, 1f)).GetComponent<RectTransform>();
             ulRt.anchorMin = new Vector2(0.05f, 0); ulRt.anchorMax = new Vector2(0.95f, 0);
             ulRt.sizeDelta = new Vector2(0, 1.5f); ulRt.anchoredPosition = new Vector2(0, 3f);
 
-            // Link button
             MakeButton(linkGO, linkGO.GetComponent<Image>(), new Color(0.35f, 0.7f, 1f, 0.15f), new Color(0.35f, 0.7f, 1f, 0.3f),
                 () => Application.OpenURL("https://steamcommunity.com/id/Skarif_W/"));
 
-            // Separators
             MakeSeparator("Sep1", bg.transform, 0.22f);
             MakeSeparator("Sep2", bg.transform, 0.14f);
 
-            // Checkbox
             bool dontShow = false;
             var labelTxt = MakeText("Label", bg.transform, "Don't show anymore / Больше не показывать", 13, new Color(0.75f, 0.75f, 0.75f));
             SetPivotAnchor(labelTxt.gameObject, new Vector2(0.5f, 0f), new Vector2(280, 30), new Vector2(20f, 85f));
@@ -86,7 +76,6 @@ namespace ValheimPerformanceOverhaul.UI
             var tickGO = MakeText("Tick", boxGO.transform, "v", 13, new Color(0.35f, 0.7f, 1f), FontStyle.Bold).gameObject;
             tickGO.SetActive(false);
 
-            // Checkbox hit area
             var checkHit = MakeRect("CheckHit", bg.transform, Color.clear);
             SetPivotAnchor(checkHit, new Vector2(0.5f, 0f), new Vector2(320, 30), new Vector2(0f, 85f));
             var boxImg = boxGO.GetComponent<Image>();
@@ -97,7 +86,6 @@ namespace ValheimPerformanceOverhaul.UI
                 boxImg.color = dontShow ? new Color(0.1f, 0.25f, 0.45f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
             });
 
-            // Close button
             var closeGO = MakeRect("Close", bg.transform, new Color(0.65f, 0.15f, 0.15f, 1f));
             SetPivotAnchor(closeGO, new Vector2(0.5f, 0f), new Vector2(140, 34), new Vector2(0, 20f));
             MakeText("CloseText", closeGO.transform, "Close / Закрыть", 15, Color.white);
@@ -108,7 +96,6 @@ namespace ValheimPerformanceOverhaul.UI
             });
         }
 
-        // ── Helpers ───────────────────────────────────────────────────
 
         private static GameObject MakeRect(string name, Transform parent, Color color)
         {
@@ -182,12 +169,10 @@ namespace ValheimPerformanceOverhaul.UI
 
         private static Font GetFont()
         {
-            // Пытаемся взять оригинальный шрифт из игры (AveriaSerifLibre)
             foreach (var f in Resources.FindObjectsOfTypeAll<Font>())
             {
                 if (f != null && f.name.Contains("Averia")) return f;
             }
-            // Фолбэк на Arial
             return Resources.GetBuiltinResource<Font>("Arial.ttf");
         }
     }
